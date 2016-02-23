@@ -1,9 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using Microsoft.CodeAnalysis;
+﻿using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace SharpJS {
    public class TranspilationRoot {
@@ -70,6 +70,19 @@ namespace SharpJS {
 
       public static IEnumerable<T> Members<T>(this ClassDeclarationSyntax n) {
          return n.Members.OfType<T>();
+      }
+
+      public static IReadOnlyList<ISymbol> GetPath(this ISymbol n) {
+         var s = new Stack<ISymbol>();
+         while (n != null) {
+            s.Push(n);
+            n = n.ContainingSymbol;
+         }
+         var result = new ISymbol[s.Count];
+         for (var i = 0; i < result.Length; i++) {
+            result[i] = s.Pop();
+         }
+         return result;
       }
    }
 }
