@@ -35,18 +35,25 @@ namespace SharpJS {
    }
 
    public static class RoslynExtensions {
-      public static string GetFullIdentifierText(this SyntaxNode node) {
+      public static string GetFullIdentifierText(this SyntaxNode node, bool includeNamespace = true) {
          string fullIdentifier = null;
          while (true) {
             string identifier;
-            switch (node.Kind()) {
-               case SyntaxKind.ClassDeclaration:
-                  identifier = ((ClassDeclarationSyntax)node).Identifier.Text;
+            switch (node) {
+               case MethodDeclarationSyntax n:
+                  identifier = n.Identifier.Text;
                   break;
-               case SyntaxKind.NamespaceDeclaration:
-                  identifier = ((NamespaceDeclarationSyntax)node).Name.ToString();
+               case NamespaceDeclarationSyntax n:
+                  if (!includeNamespace) {
+                     node = node.Parent;
+                     continue;
+                  }
+                  identifier = n.Name.ToString();
                   break;
-               case SyntaxKind.CompilationUnit:
+               case ClassDeclarationSyntax n:
+                  identifier = n.Identifier.Text;
+                  break;
+               case CompilationUnitSyntax n:
                   return fullIdentifier;
                default:
                   throw new NotImplementedException(node.Kind().ToString());

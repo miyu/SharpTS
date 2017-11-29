@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
-VisualStudioVersion = 15.0.26730.16
+VisualStudioVersion = 15.0.27004.2010
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SharpJS", "SharpJS\SharpJS.csproj", "{F75F7D9F-C021-4DD5-8B47-9D8224EF0DDE}"
 EndProject
@@ -10,6 +10,12 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SharpJS.Definitions", "SharpJS.Definitions\SharpJS.Definitions.csproj", "{C27EAE65-EE87-419F-928B-89FCCEBFA3AC}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HelloWorld", "HelloWorld\HelloWorld.csproj", "{CB9AD57F-6F04-47CD-921C-2CAEE1E46FC7}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CrossFileReferences", "CrossFileReferences\CrossFileReferences.csproj", "{DB9AD57F-6F04-47CD-921C-2CAEE1E46FC7}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SimpleOOP", "SimpleOOP\SimpleOOP.csproj", "{7A49C059-FA6F-485E-812F-E18004B89B1B}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Clipper", "Clipper\Clipper.csproj", "{621C6099-2382-4B70-A97D-6909ADFC033F}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -29,12 +35,27 @@ Global
 		{CB9AD57F-6F04-47CD-921C-2CAEE1E46FC7}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{CB9AD57F-6F04-47CD-921C-2CAEE1E46FC7}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{CB9AD57F-6F04-47CD-921C-2CAEE1E46FC7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DB9AD57F-6F04-47CD-921C-2CAEE1E46FC7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DB9AD57F-6F04-47CD-921C-2CAEE1E46FC7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DB9AD57F-6F04-47CD-921C-2CAEE1E46FC7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DB9AD57F-6F04-47CD-921C-2CAEE1E46FC7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7A49C059-FA6F-485E-812F-E18004B89B1B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7A49C059-FA6F-485E-812F-E18004B89B1B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7A49C059-FA6F-485E-812F-E18004B89B1B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7A49C059-FA6F-485E-812F-E18004B89B1B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{621C6099-2382-4B70-A97D-6909ADFC033F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{621C6099-2382-4B70-A97D-6909ADFC033F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{621C6099-2382-4B70-A97D-6909ADFC033F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{621C6099-2382-4B70-A97D-6909ADFC033F}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{CB9AD57F-6F04-47CD-921C-2CAEE1E46FC7} = {32FAF6C9-6AAB-4EA3-AA9F-F46107B12E49}
+		{DB9AD57F-6F04-47CD-921C-2CAEE1E46FC7} = {32FAF6C9-6AAB-4EA3-AA9F-F46107B12E49}
+		{7A49C059-FA6F-485E-812F-E18004B89B1B} = {32FAF6C9-6AAB-4EA3-AA9F-F46107B12E49}
+		{621C6099-2382-4B70-A97D-6909ADFC033F} = {32FAF6C9-6AAB-4EA3-AA9F-F46107B12E49}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {85FF4667-3515-4FCE-ABAC-2409F09675A9}

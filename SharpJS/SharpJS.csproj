@@ -198,6 +198,8 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="TypeScript\ITranspilationEmitter.cs" />
+    <None Include="JavaScriptES5Emitter.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="TranspiledClass.cs" />
