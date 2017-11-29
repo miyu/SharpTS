@@ -50,8 +50,11 @@ namespace SharpJS {
       private readonly HashSet<string> emittedNamespaces = new HashSet<string>();
       private string mainFullIdentifier = null;
       private Compilation compilation;
+      private SemanticModel model;
 
       public string Process(ClassDeclarationSyntax node, Compilation compilation) {
+         model = compilation.GetSemanticModel(node.SyntaxTree);
+
          sb.Clear();
          emittedNamespaces.Clear();
          mainFullIdentifier = null;
@@ -317,11 +320,7 @@ namespace SharpJS {
       }
 
       private void HandleInvocationExpression(InvocationExpressionSyntax node) {
-         var model = compilation.GetSemanticModel(node.SyntaxTree);
-         var expression = node.Expression;
-         var sminf = model.GetSymbolInfo(node.Expression);
-         var symbol = sminf.Symbol;
-         var symbolPath = symbol.GetPath();
+         var symbolPath = ResolveInvocationExpressionInvokedSymbolPath(node);
          if (TryEmitterLanguageApiOverrides(symbolPath, node.ArgumentList)) {
             // emitter handles expression emit
          } else if (TryEmitterClassInvocationOverrides(symbolPath)) {
@@ -330,6 +329,14 @@ namespace SharpJS {
             HandleStatementDescendent(node.Expression);
             HandleArgumentListExpression(node.ArgumentList);
          }
+      }
+
+      private IReadOnlyList<ISymbol> ResolveInvocationExpressionInvokedSymbolPath(InvocationExpressionSyntax node) {
+         var diags = model.Compilation.GetDiagnostics();
+         var expression = node.Expression;
+         var symbolInfo = model.GetSymbolInfo(node);
+         var symbol = symbolInfo.Symbol;
+         return symbol.GetPath();
       }
 
       private void HandleSimpleMemberAccessExpression(MemberAccessExpressionSyntax node) {
