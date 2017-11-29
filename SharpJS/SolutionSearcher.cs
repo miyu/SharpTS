@@ -100,28 +100,36 @@ namespace SharpJS {
          var fullIdentifier = GetFullEmittedIdentifier(node);
          HandleNamespaceDeclaration(fullIdentifier);
          foreach (var method in node.Members<MethodDeclarationSyntax>()) {
-            HandleMethodDeclaration(fullIdentifier, method);
+            HandleMethodDeclaration(method);
          }
       }
 
-      private void HandleMethodDeclaration(string classFullIdentifier, MethodDeclarationSyntax method) {
-         var methodName = method.Identifier.Text;
-         string methodFullIdentifier;
-         if (method.Modifiers.Any(x => x.Kind() == SyntaxKind.StaticKeyword)) {
-            methodFullIdentifier = $"{classFullIdentifier}.{methodName}";
-         } else {
-            methodFullIdentifier = $"{classFullIdentifier}.prototype.{methodName}";
-         }
+      private void HandleMethodDeclaration(MethodDeclarationSyntax method) {
+         string methodFullIdentifier = GetMethodFullIdentifier(method);
          Emit(methodFullIdentifier + " = ");
          HandleAnonymousMethod(method);
          EmitLine(";");
-         if (methodName == "Main") {
+         if (method.Identifier.Text == "Main") {
             mainFullIdentifier = methodFullIdentifier;
          }
       }
 
+      private string GetMethodFullIdentifier(MethodDeclarationSyntax method) {
+         var classFullIdentifier = method.Parent.GetFullIdentifierText();
+         var methodName = method.Identifier.Text;
+         if (method.Modifiers.Any(x => x.Kind() == SyntaxKind.StaticKeyword)) {
+            return $"{classFullIdentifier}.{methodName}";
+         } else {
+            return $"{classFullIdentifier}.prototype.{methodName}";
+         }
+      }
+
       private void HandleAnonymousMethod(MethodDeclarationSyntax method) {
-         Emit("function(");
+         var isAsync = method.Modifiers.Any(x => x.Kind() == SyntaxKind.AsyncKeyword);
+         if (isAsync) {
+            Emit("async ");
+         }
+         Emit("function (");
          Emit(string.Join(", ", method.ParameterList.Parameters.Select(p => p.Identifier.Text)));
          Emit(") ");
          HandleBlock(method.Body);
@@ -181,6 +189,12 @@ namespace SharpJS {
 
       private void HandleExpressionDescent(SyntaxNode node) {
          switch (node.Kind()) {
+            case SyntaxKind.AwaitExpression:
+               Emit("(");
+               Emit("await (");
+               HandleExpressionDescent(((AwaitExpressionSyntax)node).Expression);
+               Emit("))");
+               break;
             case SyntaxKind.NumericLiteralExpression:
                Emit(((LiteralExpressionSyntax)node).Token.Text);
                break;
@@ -304,8 +318,9 @@ namespace SharpJS {
 
       private void HandleInvocationExpression(InvocationExpressionSyntax node) {
          var model = compilation.GetSemanticModel(node.SyntaxTree);
-         var symbolInfo = model.GetSymbolInfo(node);
-         var symbol = symbolInfo.Symbol;
+         var expression = node.Expression;
+         var sminf = model.GetSymbolInfo(node.Expression);
+         var symbol = sminf.Symbol;
          var symbolPath = symbol.GetPath();
          if (TryEmitterLanguageApiOverrides(symbolPath, node.ArgumentList)) {
             // emitter handles expression emit

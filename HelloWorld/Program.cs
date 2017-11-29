@@ -1,5 +1,5 @@
-﻿using System;
-using System.Threading.Tasks;
+﻿using System.Threading.Tasks;
+using SharpJS.Definitions;
 
 namespace HelloWorld.InnerNamespace {
    public static class Program {
@@ -10,7 +10,7 @@ namespace HelloWorld.InnerNamespace {
       }
       public static async Task<int> PromptAge() {
          Console.WriteLine("How old are you?");
-         return int.Parse(Console.ReadLine());
+         return int.Parse(await Console.ReadLineAsync());
       }
    }
 }

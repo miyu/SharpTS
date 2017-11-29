@@ -7,12 +7,15 @@ namespace SharpJS {
    public static class Program {
       public static void Main() {
          var workspace = MSBuildWorkspace.Create();
-         var solutionFilePath = @"C:\my-repositories\SharpJS\HelloWorld\HelloWorld.sln";
+         var solutionFilePath = @"C:\my-repositories\miyu\SharpJS\HelloWorld\HelloWorld.sln";
          var solution = workspace.OpenSolutionAsync(solutionFilePath).Result;
          var dependencyGraph = solution.GetProjectDependencyGraph();
          var finalSource = new StringBuilder();
          foreach (var projectId in dependencyGraph.GetTopologicallySortedProjects()) {
             var project = solution.GetProject(projectId);
+            if (project.Name.Contains("SharpJS.Definitions")) {
+               continue;
+            }
             var compilation = project.GetCompilationAsync().Result;
             var classes = SolutionSearcher.FindClasses(project).Result;
             var emitter = new JavaScriptES5Emitter();
