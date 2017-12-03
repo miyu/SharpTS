@@ -9,7 +9,7 @@ namespace SimpleOOP {
          }
          ll.Dump();
          Console.WriteLine("--");
-         ll.ClearAndPrintProductExcludingFirstTwo();
+         ll.ClearAndPrintProductExcludingFirstTwoAndSelfCalls();
          Console.WriteLine("--");
          ll.Dump();
       }
@@ -46,12 +46,19 @@ namespace SimpleOOP {
       }
 
       // Real dumb, but tests for loops with a mix of initializers and declarations
-      public void ClearAndPrintProductExcludingFirstTwo() {
+      public void ClearAndPrintProductExcludingFirstTwoAndSelfCalls() {
          int product = 1;
          for (front = front.next, front = front?.next; front != null; front = front.next) {
             product *= front.value;
          }
          Console.WriteLine(product);
+         SelfCall();
+         this.SelfCall();
+         ((LinkedList)this).SelfCall();
+      }
+
+      public void SelfCall() {
+         Console.WriteLine("Self Call");
       }
    }
 

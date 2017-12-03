@@ -53,6 +53,12 @@ namespace SharpJS {
                case ClassDeclarationSyntax n:
                   identifier = n.Identifier.Text;
                   break;
+               case StructDeclarationSyntax n:
+                  identifier = n.Identifier.Text;
+                  break;
+               case EnumDeclarationSyntax n:
+                  identifier = n.Identifier.Text;
+                  break;
                case CompilationUnitSyntax n:
                   return fullIdentifier;
                default:

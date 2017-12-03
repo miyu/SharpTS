@@ -26,24 +26,25 @@ namespace SharpJS.TypeScript {
 
    public class TypeScriptProjectTranspiler {
       public static void Transpile(Project project, MSBuildWorkspace workspace, Compilation compilation, string defaultNamespace) {
-         var classes = SolutionSearcher.FindClasses(project).Result;
-         var classByFQTN = classes.ToDictionary(c => c.SJSGetFullEmittedIdentifier());
-         var classToFilePath = classes.ToDictionary(c => c, c => c.GetLocation().GetMappedLineSpan().Path);
-         var fqtnToFilePath = classByFQTN.ToDictionary(kvp => kvp.Key, kvp => classToFilePath[kvp.Value]);
-         var classesByFilePath = classes.ToLookup(c => c.GetLocation().GetMappedLineSpan().Path);
+         var (classes, structs, enums) = SolutionSearcher.FindTypes(project).Result;
+         var types = new IReadOnlyList<BaseTypeDeclarationSyntax>[] { classes, structs, enums }.SelectMany(x => x).ToList();
+         var typeByFQTN = types.ToDictionary(c => c.SJSGetFullEmittedIdentifier());
+         var typeToFilePath = types.ToDictionary(c => c, c => c.GetLocation().GetMappedLineSpan().Path);
+         var fqtnToFilePath = typeByFQTN.ToDictionary(kvp => kvp.Key, kvp => typeToFilePath[kvp.Value]);
+         var typesByFilePath = types.ToLookup(c => c.GetLocation().GetMappedLineSpan().Path);
          
-         foreach (var (filePath, fileClasses) in classesByFilePath.Select(g => (g.Key, g.ToList()))) {
-            var emittedClassSources = new List<string>();
-            var dependentClassNamesByPath = new Dictionary<string, HashSet<string>>();
+         foreach (var (filePath, fileTypes) in typesByFilePath.Select(g => (g.Key, g.ToList()))) {
+            var emittedTypeSources = new List<string>();
+            var dependentTypeNamesByPath = new Dictionary<string, HashSet<string>>();
             string entryPointFqid = null;
 
-            foreach (var clazz in fileClasses) {
-               var model = compilation.GetSemanticModel(clazz.SyntaxTree);
+            foreach (var type in fileTypes) {
+               var model = compilation.GetSemanticModel(type.SyntaxTree);
                var transpiler = new TypeScriptClassTranspiler(compilation, model, filePath, defaultNamespace, fqtnToFilePath);
-               var result = transpiler.Emit(clazz);
-               emittedClassSources.Add(result.Source);
+               var result = transpiler.Emit(type);
+               emittedTypeSources.Add(result.Source);
                foreach (var (path, classNames) in result.ImportedClassesByPath) {
-                  dependentClassNamesByPath.Add(path, classNames);
+                  dependentTypeNamesByPath.Add(path, classNames);
                }
                if (result.MainFullIdentifier != null) {
                   if (entryPointFqid != null) {
@@ -55,17 +56,31 @@ namespace SharpJS.TypeScript {
 
             var finalOutput = new StringBuilder();
 
-            foreach (var (path, classNames) in dependentClassNamesByPath) {
+            foreach (var (path, classNames) in dependentTypeNamesByPath) {
                var relativePath = new Uri(filePath).MakeRelativeUri(new Uri(path)).ToString();
                var extensionlessRelativePath = relativePath.Substring(0, relativePath.LastIndexOf('.'));
                finalOutput.AppendLine($"import {{ {string.Join(", ", classNames)} }} from './{extensionlessRelativePath}';");
             }
-            if (dependentClassNamesByPath.Any()) finalOutput.AppendLine();
+            if (dependentTypeNamesByPath.Any()) finalOutput.AppendLine();
 
-            finalOutput.AppendLine("class SharpJsHelpers { static conditionalAccess(val, next) { return val ? next(val) : val; } }");
+            finalOutput.AppendLine(
+$@"/* SharpJS - Emitted on {DateTime.Now} */
+class SharpJsHelpers {{ 
+   static conditionalAccess(val, next) {{ 
+      return val ? next(val) : val;
+   }}
+   static valueClone(val) {{ 
+      if (val.zzz__sharpjs_clone) return val.zzz__sharpjs_clone();
+      return val;
+   }}
+   static arrayClear(arr) {{ 
+      while(arr.length) arr.pop();
+   }}
+}}
+");
             finalOutput.AppendLine();
 
-            emittedClassSources.ForEach(s => finalOutput.AppendLine(s));
+            emittedTypeSources.ForEach(s => finalOutput.AppendLine(s));
             if (entryPointFqid != null) {
                finalOutput.AppendLine("eval(\"if (!module.parent) Program.Main(process.argv.slice(1))\");");
             }
@@ -139,7 +154,7 @@ namespace SharpJS.TypeScript {
          this.fqtnToFilePath = fqtnToFilePath;
       }
 
-      public TypeScriptClassTranspilationResult Emit(ClassDeclarationSyntax node) {
+      public TypeScriptClassTranspilationResult Emit(BaseTypeDeclarationSyntax node) {
          output = new StringBuilder();
          importedClassesByPath = new Dictionary<string, HashSet<string>>();
          mainFullIdentifier = null;
@@ -149,7 +164,15 @@ namespace SharpJS.TypeScript {
          if (ns != defaultNamespace) {
             throw new NotImplementedException($"Namespace mismatch: '{ns}' != '{defaultNamespace}'");
          }
-         HandleClassDeclaration(node);
+
+         if (node is ClassDeclarationSyntax cds)
+            HandleClassDeclaration(cds);
+
+         if (node is StructDeclarationSyntax sds)
+            HandleStructDeclaration(sds);
+
+         if (node is EnumDeclarationSyntax eds)
+            HandleEnumDeclaration(eds);
 
          return new TypeScriptClassTranspilationResult {
             Source = output.ToString(),
@@ -171,7 +194,17 @@ namespace SharpJS.TypeScript {
 
       private void HandleClassDeclaration(ClassDeclarationSyntax node) {
          var className = node.Identifier.Text;
-         EmitLine("export class " + className + " {");
+         Emit("export class ");
+         Emit(className + " ");
+         if (node.BaseList != null) {
+            Emit("extends ");
+            for (var i = 0; i < node.BaseList.Types.Count; i++) {
+               if (i != 0) Emit(", ");
+               HandleEmitTypeIdentifier(node.BaseList.Types[i].Type);
+            }
+            Emit(" ");
+         }
+         EmitLine("{");
          Indent();
          foreach (var field in node.Members<FieldDeclarationSyntax>()) {
             HandleFieldDeclaration(field);
@@ -183,32 +216,73 @@ namespace SharpJS.TypeScript {
          EmitLine("}");
       }
 
+      private void HandleStructDeclaration(StructDeclarationSyntax node) {
+         EmitLine("export class " + node.Identifier.Text + " {");
+         Indent();
+         foreach (var field in node.Members.OfType<FieldDeclarationSyntax>()) {
+            HandleFieldDeclaration(field);
+         }
+         foreach (var method in node.Members.OfType<MethodDeclarationSyntax>()) {
+            HandleMethodDeclaration(method);
+         }
+         EmitLine("public zzz__sharpjs_clone() : " + node.Identifier.Text + " {");
+         Indent();
+         EmitLine("let res = new " + node.Identifier.Text + "();");
+         foreach (var fieldName in node.Members.OfType<FieldDeclarationSyntax>().SelectMany(fds => fds.Declaration.Variables).Select(v => v.Identifier)) {
+            // TODO: don't try to copy statics/consts lol.
+            EmitLine("res." + fieldName + " = SharpJsHelpers.valueClone(this." + fieldName + ");");
+         }
+         EmitLine("return res;");
+         Unindent();
+         EmitLine("}");
+         Unindent();
+         EmitLine("}");
+      }
+
+      private void HandleEnumDeclaration(EnumDeclarationSyntax node) {
+         EmitLine("export enum " + node.Identifier.Text + " {");
+         Indent();
+         for (var i = 0; i < node.Members.Count; i++) {
+            if (i != 0) EmitLine(", ");
+
+            var m = node.Members[i];
+            Emit(m.Identifier.Text);
+            if (m.EqualsValue != null) {
+               Emit(" = ");
+               HandleExpressionDescent(m.EqualsValue.Value);
+            }
+         }
+         EmitLine();
+         Unindent();
+         EmitLine("}");
+      }
+
       private void HandleFieldDeclaration(FieldDeclarationSyntax field) {
-         foreach (var modifier in field.Modifiers) HandleModifier(modifier);
+         HandleModifierList(field.Modifiers);
          HandleVariableDeclarationStatement(field.Declaration, true);
       }
 
-      private void HandleModifier(SyntaxToken token) {
-         var kind = token.Kind();
-         if (kind == SyntaxKind.PublicKeyword) {
-            Emit("public ");
-         } else if (kind == SyntaxKind.PrivateKeyword) {
-            Emit("private ");
-         } else if (kind == SyntaxKind.StaticKeyword) {
-            Emit("static ");
-         } else if (kind == SyntaxKind.InternalKeyword) {
-            Emit("public "); // BUG: no TS equivalent
-         } else if (kind == SyntaxKind.ConstKeyword) {
-            Emit(""); // BUG: no TS equivalent
-         } else {
-            throw new NotImplementedException("Unhandled modifier " + kind);
-         }
+      private void HandleModifierList(SyntaxTokenList modifiers) {
+         bool HasModifier(SyntaxKind sk) => modifiers.Any(m => m.Kind() == sk);
+
+         if (HasModifier(SyntaxKind.PublicKeyword)) Emit("public ");
+         if (HasModifier(SyntaxKind.InternalKeyword)) Emit("public ");
+         if (HasModifier(SyntaxKind.PrivateKeyword)) Emit("private ");
+         if (HasModifier(SyntaxKind.StaticKeyword) ||
+             HasModifier(SyntaxKind.ConstKeyword)) Emit("static ");
+         if (HasModifier(SyntaxKind.ConstKeyword)) Emit("readonly ");
+         if (HasModifier(SyntaxKind.AbstractKeyword)) Emit("abstract ");
+
+         // BUG: No TS Equivalent
+         if (HasModifier(SyntaxKind.VirtualKeyword)) { }
       }
 
       private void HandleMethodDeclaration(MethodDeclarationSyntax method) {
-         foreach (var modifier in method.Modifiers) HandleModifier(modifier);
+         HandleModifierList(method.Modifiers);
          Emit(method.Identifier.Text);
          HandleParenthesizedParameterList(method.ParameterList);
+         Emit(" : ");
+         HandleEmitTypeIdentifier(method.ReturnType);
          Emit(" ");
          HandleBlock(method.Body, true);
          EmitLine();
@@ -281,6 +355,13 @@ namespace SharpJS.TypeScript {
                Emit(") ");
                HandleStatement(n.Statement);
                break;
+            case DoStatementSyntax n:
+               Emit("do {");
+               HandleStatement(n.Statement);
+               Emit("} while(");
+               HandleExpressionDescent(n.Condition);
+               Emit(");");
+               break;
             case ForStatementSyntax n:
                Emit("for (");
                if (n.Declaration == null) {
@@ -293,7 +374,7 @@ namespace SharpJS.TypeScript {
                   HandleVariableDeclarationStatement(n.Declaration, false);
                }
                Emit("; ");
-               HandleExpressionDescent(n.Condition);
+               if (n.Condition != null) HandleExpressionDescent(n.Condition);
                Emit("; ");
                for (var i = 0; i < n.Incrementors.Count; i++) {
                   if (i != 0) Emit(", ");
@@ -304,6 +385,55 @@ namespace SharpJS.TypeScript {
                break;
             case BlockSyntax n:
                HandleBlock(n, true);
+               break;
+            case BreakStatementSyntax n:
+               EmitLine("break;");
+               break;
+            case ContinueStatementSyntax n:
+               EmitLine("continue;");
+               break;
+            case ThrowStatementSyntax n:
+               Emit("throw ");
+               HandleExpressionDescent(n.Expression);
+               EmitLine(";");
+               break;
+            case TryStatementSyntax n:
+               Emit("try ");
+               HandleStatement(n.Block);
+               if (n.Catches.Any()) {
+                  Emit(" catch(e) {");
+                  Indent();
+                  foreach (var c in n.Catches) {
+                     EmitLine("// SJSTODO: Catch not implemented!");
+                  }
+                  Unindent();
+                  Emit("}");
+               }
+               if (n.Finally != null) {
+                  Emit(" finally ");
+                  HandleStatement(n.Finally.Block);
+               }
+               EmitLine();
+               break;
+            case ForEachStatementSyntax n:
+               HandleExpressionDescent(n.Expression);
+               Emit(".forEach((");
+               HandleEmitTypedVariable(n.Identifier.Text, n.Type);
+               EmitLine(") => {");
+               Indent();
+               HandleStatement(n.Statement);
+               Unindent();
+               EmitLine("});");
+               break;
+            case SwitchStatementSyntax n:
+               EmitLine("// SJSTODO: Switches not implemented");
+               break;
+            case EmptyStatementSyntax n:
+               Emit("{}");
+               break;
+            case CheckedStatementSyntax n:
+               // BUG: can't really support checked vs unchecked easily...
+               HandleStatement(n.Block);
                break;
             default:
                throw new NotSupportedException(statement.Kind().ToString());
@@ -322,11 +452,25 @@ namespace SharpJS.TypeScript {
                Emit(n.Token.Text);
                break;
             case IdentifierNameSyntax n:
-               var si = model.GetSymbolInfo(n);
-               var declaringSyntax = si.Symbol.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax();
-               var isField = declaringSyntax?.Parent?.Parent is FieldDeclarationSyntax;
-               var foregoImplicitThis = node.Parent is MemberAccessExpressionSyntax maes && maes.Expression != n;
-               if (isField && !foregoImplicitThis) {
+               bool CheckEmitImplicitThis() {
+                  var si = model.GetSymbolInfo(n);
+
+                  // If on RHS of . e.g. b of a.b, no need for this.
+                  if (node.Parent is MemberAccessExpressionSyntax maes && maes.Expression != n) {
+                     return false;
+                  }
+
+                  var declaringSyntax = si.Symbol.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax();
+                  if (declaringSyntax is MethodDeclarationSyntax mds) {
+                     var isStatic = mds.Modifiers.Contains(SyntaxFactory.Token(SyntaxKind.ConstKeyword)) ||
+                                    mds.Modifiers.Contains(SyntaxFactory.Token(SyntaxKind.StaticKeyword));
+                     return !isStatic;
+                  }
+
+                  var isField = declaringSyntax?.Parent?.Parent is FieldDeclarationSyntax;
+                  return isField;
+               }
+               if (CheckEmitImplicitThis()) {
                   Emit("this.");
                }
                Emit(n.Identifier.Text);
@@ -357,7 +501,8 @@ namespace SharpJS.TypeScript {
             case BinaryExpressionSyntax n:
                HandleExpressionDescent(n.Left);
                Emit(" ");
-               Emit(n.OperatorToken.Text);
+               if (n.OperatorToken.Text == "is") Emit("instanceof");
+               else Emit(n.OperatorToken.Text);
                Emit(" ");
                HandleExpressionDescent(n.Right);
                break;
@@ -387,6 +532,33 @@ namespace SharpJS.TypeScript {
                HandleExpressionDescent(n.Expression);
                Emit(")");
                break;
+            case CastExpressionSyntax n:
+               Emit("<");
+               HandleEmitTypeIdentifier(n.Type);
+               Emit(">");
+               HandleExpressionDescent(n.Expression);
+               break;
+            case ConditionalExpressionSyntax n:
+               HandleExpressionDescent(n.Condition);
+               Emit(" ? ");
+               HandleExpressionDescent(n.WhenTrue);
+               Emit(" : ");
+               HandleExpressionDescent(n.WhenFalse);
+               break;
+            case ArrayCreationExpressionSyntax n:
+               // TODO: this gona be broken
+               var ats = n.Type;
+               if (ats.RankSpecifiers.Count != 1) throw new NotSupportedException("Unsupported rank count: " + ats.RankSpecifiers.Count);
+               Emit("new Array<");
+               HandleEmitTypeIdentifier(ats.ElementType);
+               Emit(">(");
+               HandleExpressionDescent(ats.RankSpecifiers.First().Sizes.First());
+               Emit(")");
+               break;
+            case BaseExpressionSyntax n:
+               // TODO: this gonna be broken if access, say, object.gethashcode
+               Emit("super");
+               break;
             default:
                throw new NotSupportedException(node.Kind().ToString());
          }
@@ -405,7 +577,15 @@ namespace SharpJS.TypeScript {
          Emit(" ");
          Emit(node.OperatorToken.Text);
          Emit(" ");
-         HandleExpressionDescent(node.Right);
+         var rhsTi = model.GetTypeInfo(node.Right);
+         var rhsType = rhsTi.Type ?? rhsTi.ConvertedType;
+         if (rhsType.IsValueType) {
+            Emit("SharpJsHelpers.valueClone(");
+            HandleExpressionDescent(node.Right);
+            Emit(")");
+         } else {
+            HandleExpressionDescent(node.Right);
+         }
       }
 
       private void HandleMemberAccessExpression(MemberAccessExpressionSyntax node) {
@@ -445,31 +625,69 @@ namespace SharpJS.TypeScript {
          }
       }
 
-      private bool TryEmitterLanguageApiOverrides(IReadOnlyList<ISymbol> symbols, ArgumentListSyntax argumentList) {
+      private bool TryEmitterLanguageApiOverrides(IReadOnlyList<ISymbol> symbols, InvocationExpressionSyntax node, ArgumentListSyntax argumentList) {
          Trace.Assert(symbols[0].Kind == SymbolKind.Assembly);
          Trace.Assert(symbols[1].Kind == SymbolKind.NetModule);
          Trace.Assert(symbols[2].Kind == SymbolKind.Namespace); //global ns
          if (symbols[3].Kind != SymbolKind.Namespace) return false;
          switch (symbols[3].Name) {
             case nameof(System):
-               return TrySystemOverrides(symbols, 4, argumentList);
+               return TrySystemOverrides(symbols, 4, node, argumentList);
             default:
                return false;
          }
       }
 
-      private bool TrySystemOverrides(IReadOnlyList<ISymbol> symbols, int i, ArgumentListSyntax argumentList) {
+      private bool TrySystemOverrides(IReadOnlyList<ISymbol> symbols, int i, InvocationExpressionSyntax node, ArgumentListSyntax argumentList) {
          switch (symbols[i].Name) {
+            case nameof(System.Collections):
+               return TrySystemCollectionOverrides(symbols, i + 1, node, argumentList);
             case nameof(Console):
-               return TrySystemConsoleOverrides(symbols, i + 1, argumentList);
+               return TrySystemConsoleOverrides(symbols, i + 1, node, argumentList);
             case nameof(Int32):
-               return TryInt32ConsoleOverrides(symbols, i + 1, argumentList);
+               return TryInt32ConsoleOverrides(symbols, i + 1, node, argumentList);
             default:
                return false;
          }
       }
 
-      private bool TrySystemConsoleOverrides(IReadOnlyList<ISymbol> symbols, int i, ArgumentListSyntax argumentList) {
+      private bool TrySystemCollectionOverrides(IReadOnlyList<ISymbol> symbols, int i, InvocationExpressionSyntax node, ArgumentListSyntax argumentList) {
+         switch (symbols[i].Name) {
+            case nameof(System.Collections.Generic):
+               return TrySystemCollectionGenericOverrides(symbols, i + 1, node, argumentList);
+            default:
+               return false;
+         }
+      }
+
+      private bool TrySystemCollectionGenericOverrides(IReadOnlyList<ISymbol> symbols, int i, InvocationExpressionSyntax node, ArgumentListSyntax argumentList) {
+         switch (symbols[i].Name) {
+            case "List":
+               return TrySystemCollectionGenericListOverrides(symbols, i + 1, node, argumentList);
+            default:
+               return false;
+         }
+      }
+      private bool TrySystemCollectionGenericListOverrides(IReadOnlyList<ISymbol> symbols, int i, InvocationExpressionSyntax node, ArgumentListSyntax argumentList) {
+         var maes = (MemberAccessExpressionSyntax)node.Expression;
+         switch (symbols[i].Name) {
+            case nameof(List<object>.Clear):
+               Emit("SharpJsHelpers.arrayClear(");
+               HandleExpressionDescent(maes.Expression);
+               Emit(")");
+               return true;
+            case nameof(List<object>.Add):
+               HandleExpressionDescent(maes.Expression);
+               Emit(".push(");
+               HandleArgumentListExpression(argumentList);
+               Emit(")");
+               return true;
+            default:
+               return false;
+         }
+      }
+
+      private bool TrySystemConsoleOverrides(IReadOnlyList<ISymbol> symbols, int i, InvocationExpressionSyntax node, ArgumentListSyntax argumentList) {
          switch (symbols[i].Name) {
             case nameof(Console.WriteLine):
                Emit("console.log(");
@@ -484,7 +702,7 @@ namespace SharpJS.TypeScript {
          }
       }
 
-      private bool TryInt32ConsoleOverrides(IReadOnlyList<ISymbol> symbols, int i, ArgumentListSyntax argumentList) {
+      private bool TryInt32ConsoleOverrides(IReadOnlyList<ISymbol> symbols, int i, InvocationExpressionSyntax node, ArgumentListSyntax argumentList) {
          switch (symbols[i].Name) {
             case nameof(int.Parse):
                Emit("parseInt(");
@@ -552,15 +770,23 @@ namespace SharpJS.TypeScript {
             case nameof(SByte):
             case nameof(Int16):
             case nameof(Int32):
+            case nameof(Int64):
             case nameof(Byte):
             case nameof(UInt16):
             case nameof(UInt32):
+            case nameof(UInt64):
             case nameof(Single):
             case nameof(Double):
                Emit("number");
                break;
             case nameof(String):
                Emit("string");
+               break;
+            case nameof(Boolean):
+               Emit("boolean");
+               break;
+            case "Void":
+               Emit("void");
                break;
             default:
                Emit(type.Name);
@@ -587,7 +813,7 @@ namespace SharpJS.TypeScript {
 
       private void HandleInvocationExpression(InvocationExpressionSyntax node) {
          var symbolPath = ResolveInvocationExpressionInvokedSymbolPath(node);
-         if (TryEmitterLanguageApiOverrides(symbolPath, node.ArgumentList)) {
+         if (TryEmitterLanguageApiOverrides(symbolPath, node, node.ArgumentList)) {
             // emitter handles expression emit
          } else if (TryEmitterClassInvocationOverrides(symbolPath)) {
             Emit("(");
