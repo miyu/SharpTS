@@ -76,6 +76,12 @@ class SharpJsHelpers {{
    static arrayClear(arr) {{ 
       while(arr.length) arr.pop();
    }}
+   static TestTypeCheck(x, type) {{
+      if (type === 'string') return typeof(x) == 'string' || x instanceof String;
+      if (typeof(type) === 'string') return typeof(x) == type;
+      if (typeof(type) === 'function') return x instanceof type;
+      return false;
+   }}
 }}
 ");
             finalOutput.AppendLine();
@@ -209,9 +215,8 @@ class SharpJsHelpers {{
          foreach (var field in node.Members<FieldDeclarationSyntax>()) {
             HandleFieldDeclaration(field);
          }
-         foreach (var method in node.Members<MethodDeclarationSyntax>()) {
-            HandleMethodDeclaration(method);
-         }
+         HandleMethodDeclarations(node.Identifier.Text, node.Members.OfType<MethodDeclarationSyntax>().ToList());
+
          Unindent();
          EmitLine("}");
       }
@@ -222,9 +227,8 @@ class SharpJsHelpers {{
          foreach (var field in node.Members.OfType<FieldDeclarationSyntax>()) {
             HandleFieldDeclaration(field);
          }
-         foreach (var method in node.Members.OfType<MethodDeclarationSyntax>()) {
-            HandleMethodDeclaration(method);
-         }
+         HandleMethodDeclarations(node.Identifier.Text, node.Members.OfType<MethodDeclarationSyntax>().ToList());
+
          EmitLine("public zzz__sharpjs_clone() : " + node.Identifier.Text + " {");
          Indent();
          EmitLine("let res = new " + node.Identifier.Text + "();");
@@ -262,24 +266,98 @@ class SharpJsHelpers {{
          HandleVariableDeclarationStatement(field.Declaration, true);
       }
 
-      private void HandleModifierList(SyntaxTokenList modifiers) {
-         bool HasModifier(SyntaxKind sk) => modifiers.Any(m => m.Kind() == sk);
+      private bool HasModifier(SyntaxTokenList modifiers, SyntaxKind sk) => modifiers.Any(m => m.Kind() == sk);
 
-         if (HasModifier(SyntaxKind.PublicKeyword)) Emit("public ");
-         if (HasModifier(SyntaxKind.InternalKeyword)) Emit("public ");
-         if (HasModifier(SyntaxKind.PrivateKeyword)) Emit("private ");
-         if (HasModifier(SyntaxKind.StaticKeyword) ||
-             HasModifier(SyntaxKind.ConstKeyword)) Emit("static ");
-         if (HasModifier(SyntaxKind.ConstKeyword)) Emit("readonly ");
-         if (HasModifier(SyntaxKind.AbstractKeyword)) Emit("abstract ");
+      private void HandleModifierList(SyntaxTokenList modifiers) {
+         bool Has(SyntaxKind sk) => HasModifier(modifiers, sk);
+
+         if (Has(SyntaxKind.PublicKeyword)) Emit("public ");
+         if (Has(SyntaxKind.InternalKeyword)) Emit("public ");
+         if (Has(SyntaxKind.PrivateKeyword)) Emit("private ");
+         if (Has(SyntaxKind.StaticKeyword) ||
+             Has(SyntaxKind.ConstKeyword)) Emit("static ");
+         if (Has(SyntaxKind.ConstKeyword)) Emit("readonly ");
+         if (Has(SyntaxKind.AbstractKeyword)) Emit("abstract ");
 
          // BUG: No TS Equivalent
-         if (HasModifier(SyntaxKind.VirtualKeyword)) { }
+         if (Has(SyntaxKind.VirtualKeyword)) { }
       }
 
-      private void HandleMethodDeclaration(MethodDeclarationSyntax method) {
+      private void HandleMethodDeclarations(string containingTypeName, List<MethodDeclarationSyntax> methods) {
+         var methodGroups = methods.GroupBy(m => m.Identifier.Text);
+         foreach (var (methodName, matches) in methodGroups.Select(g => (g.Key, g.ToArray()))) {
+            if (matches.Length == 1) {
+               HandleMethodDeclaration(matches[0], null);
+            } else {
+               HandleOverloadedMethodGroupEmit(containingTypeName, methodName, matches);
+            }
+         }
+      }
+
+      private void HandleOverloadedMethodGroupEmit(string containingTypeName, string methodName, MethodDeclarationSyntax[] matches) {
+         string BuildName(int i) => methodName + "_SharpJs_Overload_" + i;
+
+         for (var i = 0; i < matches.Length; i++) {
+            Console.WriteLine("Overloaded Method: " + matches[i]);
+            HandleMethodDeclaration(matches[i], BuildName(i));
+         }
+
+         Emit("public ");
+         if (matches.Any(m => HasModifier(m.Modifiers, SyntaxKind.StaticKeyword))) {
+            if (!matches.All(m => HasModifier(m.Modifiers, SyntaxKind.StaticKeyword))) {
+               Console.Error.WriteLine("Warning: " + methodName + " overloads must all have same staticness for transpilation.");
+            }
+            Emit("static ");
+         }
+
+         Emit(methodName);
+         Emit("(...args: any[]): ");
+         for (var i = 0; i < matches.Length; i++) {
+            if (i != 0) Emit(" | ");
+            HandleEmitTypeIdentifier(matches[i].ReturnType);
+         }
+
+         EmitLine(" {");
+         Indent();
+
+         for (var i = 0; i < matches.Length; i++) {
+            var match = matches[i];
+
+            if (i != 0) Emit("else ");
+            Emit("if (");
+            Emit("args.length == " + match.ParameterList.Parameters.Count);
+            for (var j = 0; j < match.ParameterList.Parameters.Count; j++) {
+               var parameter = match.ParameterList.Parameters[j];
+               Emit(" && ");
+               Emit("SharpJsHelpers.TestTypeCheck(args[" + j + "], ");
+               HandleEmitTypeIdentifier(parameter.Type, true);
+               Emit(")");
+            }
+            Emit(") ");
+            Emit("return ");
+            Emit(HasModifier(match.Modifiers, SyntaxKind.StaticKeyword) ? containingTypeName : "this");
+            Emit(".");
+            Emit(BuildName(i));
+            Emit("(");
+            for (var j = 0; j < match.ParameterList.Parameters.Count; j++) {
+               if (j != 0) Emit(", ");
+               Emit("<");
+               HandleEmitTypeIdentifier(match.ParameterList.Parameters[j].Type);
+               Emit(">");
+               Emit("args[" + j + "]");
+            }
+            EmitLine(");");
+         }
+         EmitLine("throw new Error('SharpJS: Failed to match method overload. This can be due to differences in C#/JS type system.');");
+
+         Unindent();
+         EmitLine("}");
+         EmitLine();
+      }
+
+      private void HandleMethodDeclaration(MethodDeclarationSyntax method, string emittedNameOptionalOverride) {
          HandleModifierList(method.Modifiers);
-         Emit(method.Identifier.Text);
+         Emit(emittedNameOptionalOverride ?? method.Identifier.Text);
          HandleParenthesizedParameterList(method.ParameterList);
          Emit(" : ");
          HandleEmitTypeIdentifier(method.ReturnType);
@@ -458,26 +536,32 @@ class SharpJsHelpers {{
                Emit(n.Token.Text);
                break;
             case IdentifierNameSyntax n:
-               bool CheckEmitImplicitThis() {
-                  var si = model.GetSymbolInfo(n);
+               const int kEmitThis = 0, kEmitStatic = 1, kEmitNothing = 2;
 
+               var si = model.GetSymbolInfo(n);
+               var declaringSyntax = si.Symbol.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax();
+
+               int CheckRequiredAmbuityResolution() {
                   // If on RHS of . e.g. b of a.b, no need for this.
                   if (node.Parent is MemberAccessExpressionSyntax maes && maes.Expression != n) {
-                     return false;
+                     return kEmitNothing;
                   }
 
-                  var declaringSyntax = si.Symbol.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax();
-                  if (declaringSyntax is MethodDeclarationSyntax mds) {
-                     var isStatic = mds.Modifiers.Contains(SyntaxFactory.Token(SyntaxKind.ConstKeyword)) ||
-                                    mds.Modifiers.Contains(SyntaxFactory.Token(SyntaxKind.StaticKeyword));
-                     return !isStatic;
+                  if (declaringSyntax is MethodDeclarationSyntax ||
+                      declaringSyntax?.Parent?.Parent is FieldDeclarationSyntax) {
+                     return si.Symbol.IsStatic ? kEmitStatic : kEmitThis;
                   }
-
-                  var isField = declaringSyntax?.Parent?.Parent is FieldDeclarationSyntax;
-                  return isField;
+                  return kEmitNothing;
                }
-               if (CheckEmitImplicitThis()) {
-                  Emit("this.");
+
+               var ambiguityResolution = CheckRequiredAmbuityResolution();
+               if (ambiguityResolution == kEmitThis) Emit("this.");
+               else if (ambiguityResolution == kEmitStatic) {
+                  var clazz = declaringSyntax.Ancestors().OfType<ClassDeclarationSyntax>().FirstOrDefault();
+                  var struzt = declaringSyntax.Ancestors().OfType<StructDeclarationSyntax>().FirstOrDefault();
+                  if (clazz != null) HandleEmitTypeIdentifier(clazz);
+                  if (struzt != null) HandleEmitTypeIdentifier(struzt);
+                  Emit(".");
                }
                Emit(n.Identifier.Text);
                break;
@@ -778,24 +862,34 @@ class SharpJsHelpers {{
          return false;
       }
 
-      private void HandleEmitTypeIdentifier(TypeSyntax node) {
+      private void HandleEmitTypeIdentifier(BaseTypeDeclarationSyntax node, bool isSharpJsHelperTypeCheckArg = false) {
+         // TODO: Probably buggy with nested classes.
+         HandlePotentialCrossFileClassDependency(node);
+         Emit(node.Identifier.Text);
+      }
+
+      private void HandleEmitTypeIdentifier(TypeSyntax node, bool isSharpJsHelperTypeCheckArg = false) {
          var typeInfo = model.GetTypeInfo(node);
          var type = typeInfo.Type;
 
          if (type != null) {
-            HandleEmitTypeIdentifier(type);
+            HandleEmitTypeIdentifier(type, isSharpJsHelperTypeCheckArg);
          } else {
             var si = model.GetSymbolInfo(node);
             var nts = (ITypeSymbol)si.Symbol;
-            HandleEmitTypeIdentifier(nts);
+            HandleEmitTypeIdentifier(nts, isSharpJsHelperTypeCheckArg);
          }
       }
 
-      private void HandleEmitTypeIdentifier(ITypeSymbol type) {
+      private void HandleEmitTypeIdentifier(ITypeSymbol type, bool isSharpJsHelperTypeCheckArg = false) {
          if (type.TypeKind == TypeKind.Array) {
-            var arrayType = (IArrayTypeSymbol)type;
-            HandleEmitTypeIdentifier(arrayType.ElementType);
-            Emit("[]");
+            if (isSharpJsHelperTypeCheckArg) {
+               Emit("Array");
+            } else {
+               var arrayType = (IArrayTypeSymbol)type;
+               HandleEmitTypeIdentifier(arrayType.ElementType);
+               Emit("[]");
+            }
             return;
          }
 
@@ -803,9 +897,13 @@ class SharpJsHelpers {{
          if (nts != null) {
             switch (nts.SJSGetFullEmittedIdentifier()) {
                case "System.Collections.Generic.List":
-                  Emit("Array<");
-                  HandleEmitTypeIdentifier(nts.TypeArguments[0]);
-                  Emit(">");
+                  if (isSharpJsHelperTypeCheckArg) {
+                     Emit("Array");
+                  } else {
+                     Emit("Array<");
+                     HandleEmitTypeIdentifier(nts.TypeArguments[0]);
+                     Emit(">");
+                  }
                   return;
             }
          }
@@ -822,21 +920,31 @@ class SharpJsHelpers {{
             case nameof(UInt64):
             case nameof(Single):
             case nameof(Double):
-               Emit("number");
+               Emit(isSharpJsHelperTypeCheckArg ? "'number'" : "number");
                break;
             case nameof(String):
-               Emit("string");
+               Emit(isSharpJsHelperTypeCheckArg ? "'string'" : "string");
                break;
             case nameof(Boolean):
-               Emit("boolean");
+               Emit(isSharpJsHelperTypeCheckArg ? "'boolean'" : "boolean");
                break;
             case "Void":
+               if (isSharpJsHelperTypeCheckArg) throw new InvalidOperationException("Transpiler error. Shouldn't be type checking for void?");
                Emit("void");
                break;
             default:
                Emit(type.Name);
                break;
          }
+      }
+
+      private void HandlePotentialCrossFileClassDependency(BaseTypeDeclarationSyntax decl) {
+         var loc = decl.GetLocation().GetMappedLineSpan();
+         if (loc.Path == null) {
+            // not our code
+            return;
+         }
+         HandlePotentialCrossFileClassDependency(decl.Identifier.Text, loc.Path);
       }
 
       private void HandlePotentialCrossFileClassDependency(ITypeSymbol type) {

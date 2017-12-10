@@ -5,6 +5,7 @@ namespace SimpleOOP {
       static void Main(string[] args) {
          LinkedListDemo.Test();
          ArrayDemo.Test();
+         OverloadingDemo.Test();
       }
    }
 }
