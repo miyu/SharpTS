@@ -77,6 +77,7 @@ class SharpJsHelpers {{
       while(arr.length) arr.pop();
    }}
    static TestTypeCheck(x, type) {{
+      if (type === 'object') return typeof(x) == 'object' || x instanceof Object || x == null;
       if (type === 'string') return typeof(x) == 'string' || x instanceof String;
       if (typeof(type) === 'string') return typeof(x) == type;
       if (typeof(type) === 'function') return x instanceof type;
@@ -927,6 +928,9 @@ class SharpJsHelpers {{
                break;
             case nameof(Boolean):
                Emit(isSharpJsHelperTypeCheckArg ? "'boolean'" : "boolean");
+               break;
+            case nameof(Object):
+               Emit(isSharpJsHelperTypeCheckArg ? "'object'" : "{}");
                break;
             case "Void":
                if (isSharpJsHelperTypeCheckArg) throw new InvalidOperationException("Transpiler error. Shouldn't be type checking for void?");

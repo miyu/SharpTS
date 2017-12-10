@@ -25,8 +25,8 @@ namespace SharpJS {
 
          //var solutionFilePath = @"C:\my-repositories\miyu\SharpJS\HelloWorld\HelloWorld.sln";
          //var solutionFilePath = @"C:\my-repositories\miyu\SharpJS\CrossFileReferences\CrossFileReferences.sln";
-         //var solutionFilePath = @"C:\my-repositories\miyu\SharpJS\SimpleOOP\SimpleOOP.sln";
-         var solutionFilePath = @"C:\my-repositories\miyu\SharpJS\Clipper\Clipper.sln";
+         var solutionFilePath = @"C:\my-repositories\miyu\SharpJS\SimpleOOP\SimpleOOP.sln";
+         //var solutionFilePath = @"C:\my-repositories\miyu\SharpJS\Clipper\Clipper.sln";
          var solution = workspace.OpenSolutionAsync(solutionFilePath).Result;
          var dependencyGraph = solution.GetProjectDependencyGraph();
          var finalSource = new StringBuilder();
