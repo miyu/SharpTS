@@ -4,6 +4,7 @@ namespace SimpleOOP {
    public class Program {
       static void Main(string[] args) {
          LinkedListDemo.Test();
+         ArrayDemo.Test();
       }
    }
 }

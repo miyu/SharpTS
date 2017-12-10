@@ -284,7 +284,13 @@ class SharpJsHelpers {{
          Emit(" : ");
          HandleEmitTypeIdentifier(method.ReturnType);
          Emit(" ");
-         HandleBlock(method.Body, true);
+         if (method.Body != null) {
+            HandleBlock(method.Body, true);
+         } else {
+            Emit("{ return ");
+            HandleExpressionDescent(method.ExpressionBody.Expression);
+            EmitLine("; }");
+         }
          EmitLine();
          if (method.Identifier.Text == "Main") {
             mainFullIdentifier = method.SJSGetNamespaceLessFullEmittedIdentifier();
@@ -588,10 +594,19 @@ class SharpJsHelpers {{
          }
       }
 
+      // Note: SimpleAssignmentExpression LHS can be MemberAccessExpression. 
+      // We want to handle getters and setters here. Getters are overrided as normal.
+      // Setters must not be overrided as getters. Setter overriding happens at the
+      // SimpleAssignmentExpression.
       private void HandleMemberAccessExpression(MemberAccessExpressionSyntax node) {
-         HandleExpressionDescent(node.Expression);
-         Emit(".");
-         Emit(node.Name.Identifier.Text);
+         var isAssignmentLhs = node.Parent is AssignmentExpressionSyntax aes && node == aes.Left;
+         if (!isAssignmentLhs && TryEmitterLanguageApiGetterOverrides(ResolveExpressionInvokedSymbolPath(node), node)) {
+            // Override handles emit.
+         } else {
+            HandleExpressionDescent(node.Expression);
+            Emit(".");
+            Emit(node.Name.Identifier.Text);
+         }
       }
 
       private void HandleArgumentExpression(ArgumentSyntax node) {
@@ -625,93 +640,123 @@ class SharpJsHelpers {{
          }
       }
 
-      private bool TryEmitterLanguageApiOverrides(IReadOnlyList<ISymbol> symbols, InvocationExpressionSyntax node, ArgumentListSyntax argumentList) {
+      private bool TryEmitterLanguageApiGetterOverrides(IReadOnlyList<ISymbol> symbols, MemberAccessExpressionSyntax node) {
          Trace.Assert(symbols[0].Kind == SymbolKind.Assembly);
          Trace.Assert(symbols[1].Kind == SymbolKind.NetModule);
          Trace.Assert(symbols[2].Kind == SymbolKind.Namespace); //global ns
          if (symbols[3].Kind != SymbolKind.Namespace) return false;
-         switch (symbols[3].Name) {
-            case nameof(System):
-               return TrySystemOverrides(symbols, 4, node, argumentList);
-            default:
-               return false;
+
+         bool IsMatch(params string[] path) => symbols.Count == 3 + path.Length + 1 && symbols.Skip(3).Take(path.Length).Select(s => s.Name).SequenceEqual(path);
+
+         var subject = node.Expression;
+         if (IsMatch(nameof(System), nameof(System.Collections), nameof(System.Collections.Generic), "List")) {
+            switch (symbols[7].Name) {
+               case nameof(List<object>.Count):
+                  HandleExpressionDescent(subject);
+                  Emit(".length");
+                  return true;
+            }
+         } else if (IsMatch(nameof(System), nameof(System.Array))) {
+            switch (symbols[5].Name) {
+               case nameof(Array.Length):
+                  HandleExpressionDescent(subject);
+                  Emit(".length");
+                  return true;
+            }
          }
+         return false;
       }
 
-      private bool TrySystemOverrides(IReadOnlyList<ISymbol> symbols, int i, InvocationExpressionSyntax node, ArgumentListSyntax argumentList) {
-         switch (symbols[i].Name) {
-            case nameof(System.Collections):
-               return TrySystemCollectionOverrides(symbols, i + 1, node, argumentList);
-            case nameof(Console):
-               return TrySystemConsoleOverrides(symbols, i + 1, node, argumentList);
-            case nameof(Int32):
-               return TryInt32ConsoleOverrides(symbols, i + 1, node, argumentList);
-            default:
-               return false;
+      private bool TryEmitterLanguageApiSetterOverrides(IReadOnlyList<ISymbol> symbols, InvocationExpressionSyntax node, ArgumentListSyntax argumentList) {
+         Trace.Assert(symbols[0].Kind == SymbolKind.Assembly);
+         Trace.Assert(symbols[1].Kind == SymbolKind.NetModule);
+         Trace.Assert(symbols[2].Kind == SymbolKind.Namespace); //global ns
+         if (symbols[3].Kind != SymbolKind.Namespace) return false;
+
+         bool IsMatch(params string[] path) => symbols.Count == 3 + path.Length + 1 && symbols.Skip(3).Take(path.Length).Select(s => s.Name).SequenceEqual(path);
+
+         if (IsMatch(nameof(System), nameof(System.Console))) {
+            switch (symbols[5].Name) {
+               case nameof(Console.WriteLine):
+                  Emit("console.log(");
+                  HandleArgumentListExpression(argumentList);
+                  Emit(")");
+                  return true;
+               case nameof(Console.ReadLine):
+                  Emit("prompt(\"Enter String Input:\")");
+                  return true;
+            }
+         } else if (IsMatch(nameof(System), nameof(Int32))) {
+            switch (symbols[5].Name) {
+               case nameof(int.Parse):
+                  Emit("parseInt(");
+                  HandleArgumentListExpression(argumentList);
+                  Emit(")");
+                  return true;
+            }
+         } else if (IsMatch(nameof(System), nameof(System.Collections), nameof(System.Collections.Generic), "List")) {
+            var maes = (MemberAccessExpressionSyntax)node.Expression;
+            switch (symbols[7].Name) {
+               case nameof(List<object>.Clear):
+                  Emit("SharpJsHelpers.arrayClear(");
+                  HandleExpressionDescent(maes.Expression);
+                  Emit(")");
+                  return true;
+               case nameof(List<object>.Add):
+                  HandleExpressionDescent(maes.Expression);
+                  Emit(".push(");
+                  HandleArgumentListExpression(argumentList);
+                  Emit(")");
+                  return true;
+            }
          }
+         return false;
       }
 
-      private bool TrySystemCollectionOverrides(IReadOnlyList<ISymbol> symbols, int i, InvocationExpressionSyntax node, ArgumentListSyntax argumentList) {
-         switch (symbols[i].Name) {
-            case nameof(System.Collections.Generic):
-               return TrySystemCollectionGenericOverrides(symbols, i + 1, node, argumentList);
-            default:
-               return false;
-         }
-      }
+      private bool TryEmitterLanguageApiInvocationOverrides(IReadOnlyList<ISymbol> symbols, InvocationExpressionSyntax node, ArgumentListSyntax argumentList) {
+         Trace.Assert(symbols[0].Kind == SymbolKind.Assembly);
+         Trace.Assert(symbols[1].Kind == SymbolKind.NetModule);
+         Trace.Assert(symbols[2].Kind == SymbolKind.Namespace); //global ns
+         if (symbols[3].Kind != SymbolKind.Namespace) return false;
 
-      private bool TrySystemCollectionGenericOverrides(IReadOnlyList<ISymbol> symbols, int i, InvocationExpressionSyntax node, ArgumentListSyntax argumentList) {
-         switch (symbols[i].Name) {
-            case "List":
-               return TrySystemCollectionGenericListOverrides(symbols, i + 1, node, argumentList);
-            default:
-               return false;
-         }
-      }
-      private bool TrySystemCollectionGenericListOverrides(IReadOnlyList<ISymbol> symbols, int i, InvocationExpressionSyntax node, ArgumentListSyntax argumentList) {
-         var maes = (MemberAccessExpressionSyntax)node.Expression;
-         switch (symbols[i].Name) {
-            case nameof(List<object>.Clear):
-               Emit("SharpJsHelpers.arrayClear(");
-               HandleExpressionDescent(maes.Expression);
-               Emit(")");
-               return true;
-            case nameof(List<object>.Add):
-               HandleExpressionDescent(maes.Expression);
-               Emit(".push(");
-               HandleArgumentListExpression(argumentList);
-               Emit(")");
-               return true;
-            default:
-               return false;
-         }
-      }
+         bool IsMatch(params string[] path) => symbols.Count == 3 + path.Length + 1 && symbols.Skip(3).Take(path.Length).Select(s => s.Name).SequenceEqual(path);
 
-      private bool TrySystemConsoleOverrides(IReadOnlyList<ISymbol> symbols, int i, InvocationExpressionSyntax node, ArgumentListSyntax argumentList) {
-         switch (symbols[i].Name) {
-            case nameof(Console.WriteLine):
-               Emit("console.log(");
-               HandleArgumentListExpression(argumentList);
-               Emit(")");
-               return true;
-            case nameof(Console.ReadLine):
-               Emit("prompt(\"Enter String Input:\")");
-               return true;
-            default:
-               return false;
+         if (IsMatch(nameof(System), nameof(System.Console))) {
+            switch (symbols[5].Name) {
+               case nameof(Console.WriteLine):
+                  Emit("console.log(");
+                  HandleArgumentListExpression(argumentList);
+                  Emit(")");
+                  return true;
+               case nameof(Console.ReadLine):
+                  Emit("prompt(\"Enter String Input:\")");
+                  return true;
+            }
+         } else if (IsMatch(nameof(System), nameof(Int32))) {
+            switch (symbols[5].Name) {
+               case nameof(int.Parse):
+                  Emit("parseInt(");
+                  HandleArgumentListExpression(argumentList);
+                  Emit(")");
+                  return true;
+            }
+         } else if (IsMatch(nameof(System), nameof(System.Collections), nameof(System.Collections.Generic), "List")) {
+            var maes = (MemberAccessExpressionSyntax)node.Expression;
+            switch (symbols[7].Name) {
+               case nameof(List<object>.Clear):
+                  Emit("SharpJsHelpers.arrayClear(");
+                  HandleExpressionDescent(maes.Expression);
+                  Emit(")");
+                  return true;
+               case nameof(List<object>.Add):
+                  HandleExpressionDescent(maes.Expression);
+                  Emit(".push(");
+                  HandleArgumentListExpression(argumentList);
+                  Emit(")");
+                  return true;
+            }
          }
-      }
-
-      private bool TryInt32ConsoleOverrides(IReadOnlyList<ISymbol> symbols, int i, InvocationExpressionSyntax node, ArgumentListSyntax argumentList) {
-         switch (symbols[i].Name) {
-            case nameof(int.Parse):
-               Emit("parseInt(");
-               HandleArgumentListExpression(argumentList);
-               Emit(")");
-               return true;
-            default:
-               return false;
-         }
+         return false;
       }
 
       private bool TryEmitterClassInvocationOverrides(IReadOnlyList<ISymbol> symbols) {
@@ -812,8 +857,8 @@ class SharpJsHelpers {{
       }
 
       private void HandleInvocationExpression(InvocationExpressionSyntax node) {
-         var symbolPath = ResolveInvocationExpressionInvokedSymbolPath(node);
-         if (TryEmitterLanguageApiOverrides(symbolPath, node, node.ArgumentList)) {
+         var symbolPath = ResolveExpressionInvokedSymbolPath(node);
+         if (TryEmitterLanguageApiInvocationOverrides(symbolPath, node, node.ArgumentList)) {
             // emitter handles expression emit
          } else if (TryEmitterClassInvocationOverrides(symbolPath)) {
             Emit("(");
@@ -827,18 +872,14 @@ class SharpJsHelpers {{
          }
       }
 
-      private IReadOnlyList<ISymbol> ResolveInvocationExpressionInvokedSymbolPath(InvocationExpressionSyntax node) {
-         var diags = model.Compilation.GetDiagnostics();
-         var expression = node.Expression;
-         var symbolInfo = model.GetSymbolInfo(expression);
-         var symbol = symbolInfo.Symbol;
-         return symbol.GetPath();
+      private IReadOnlyList<ISymbol> ResolveExpressionInvokedSymbolPath(InvocationExpressionSyntax node) {
+         return ResolveExpressionInvokedSymbolPath(node.Expression);
       }
 
-      private void HandleSimpleMemberAccessExpression(MemberAccessExpressionSyntax node) {
-         HandleExpressionDescent(node.Expression);
-         Emit(node.OperatorToken.Text);
-         Emit(node.Name.Identifier.Text);
+      private IReadOnlyList<ISymbol> ResolveExpressionInvokedSymbolPath(ExpressionSyntax node) {
+         var symbolInfo = model.GetSymbolInfo(node);
+         var symbol = symbolInfo.Symbol;
+         return symbol.GetPath();
       }
 
 
