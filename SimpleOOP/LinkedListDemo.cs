@@ -7,6 +7,7 @@ namespace SimpleOOP {
          for (var i = 0; i < 10; i++) {
             ll.Append(i);
          }
+         ll.Prepend(1337);
          ll.Dump();
          Console.WriteLine("--");
          ll.ClearAndPrintProductExcludingFirstTwoAndSelfCalls();
@@ -18,12 +19,7 @@ namespace SimpleOOP {
    public class LinkedList {
       private LinkedListNode front;
 
-      public void Prepend(int val) {
-         var node = new LinkedListNode();
-         node.value = val;
-         node.next = front;
-         front = node;
-      }
+      public void Prepend(int val) => front = new LinkedListNode(val, front);
 
       public void Append(int val) {
          var node = new LinkedListNode();
@@ -65,5 +61,12 @@ namespace SimpleOOP {
    public class LinkedListNode {
       public int value;
       public LinkedListNode next;
+
+      public LinkedListNode() { }
+
+      public LinkedListNode(int value, LinkedListNode next) {
+         this.value = value;
+         this.next = next;
+      }
    }
 }

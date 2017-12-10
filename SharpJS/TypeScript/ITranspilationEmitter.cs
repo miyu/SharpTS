@@ -217,6 +217,7 @@ class SharpJsHelpers {{
             HandleFieldDeclaration(field);
          }
          HandleMethodDeclarations(node.Identifier.Text, node.Members.OfType<MethodDeclarationSyntax>().ToList());
+         HandleMethodDeclarations(node.Identifier.Text, node.Members.OfType<ConstructorDeclarationSyntax>().ToList());
 
          Unindent();
          EmitLine("}");
@@ -284,18 +285,19 @@ class SharpJsHelpers {{
          if (Has(SyntaxKind.VirtualKeyword)) { }
       }
 
-      private void HandleMethodDeclarations(string containingTypeName, List<MethodDeclarationSyntax> methods) {
-         var methodGroups = methods.GroupBy(m => m.Identifier.Text);
+      private void HandleMethodDeclarations(string containingTypeName, IReadOnlyList<BaseMethodDeclarationSyntax> methods) {
+         var methodGroups = methods.GroupBy(m => m is MethodDeclarationSyntax mds ? mds.Identifier.Text : "constructor");
          foreach (var (methodName, matches) in methodGroups.Select(g => (g.Key, g.ToArray()))) {
             if (matches.Length == 1) {
-               HandleMethodDeclaration(matches[0], null);
+               HandleMethodDeclaration(matches[0], methodName);
             } else {
-               HandleOverloadedMethodGroupEmit(containingTypeName, methodName, matches);
+               var isCtor = methodName == "constructor";
+               HandleOverloadedMethodGroupEmit(containingTypeName, methodName, matches, isCtor);
             }
          }
       }
 
-      private void HandleOverloadedMethodGroupEmit(string containingTypeName, string methodName, MethodDeclarationSyntax[] matches) {
+      private void HandleOverloadedMethodGroupEmit(string containingTypeName, string methodName, BaseMethodDeclarationSyntax[] matches, bool isCtor) {
          string BuildName(int i) => methodName + "_SharpJs_Overload_" + i;
 
          for (var i = 0; i < matches.Length; i++) {
@@ -312,10 +314,13 @@ class SharpJsHelpers {{
          }
 
          Emit(methodName);
-         Emit("(...args: any[]): ");
-         for (var i = 0; i < matches.Length; i++) {
-            if (i != 0) Emit(" | ");
-            HandleEmitTypeIdentifier(matches[i].ReturnType);
+         Emit("(...args: any[])");
+         if (!isCtor) {
+            Emit(": ");
+            for (var i = 0; i < matches.Length; i++) {
+               if (i != 0) Emit(" | ");
+               HandleEmitTypeIdentifier(((MethodDeclarationSyntax)matches[i]).ReturnType);
+            }
          }
 
          EmitLine(" {");
@@ -335,7 +340,7 @@ class SharpJsHelpers {{
                Emit(")");
             }
             Emit(") ");
-            Emit("return ");
+            Emit(isCtor ? "{ " : "return ");
             Emit(HasModifier(match.Modifiers, SyntaxKind.StaticKeyword) ? containingTypeName : "this");
             Emit(".");
             Emit(BuildName(i));
@@ -347,7 +352,8 @@ class SharpJsHelpers {{
                Emit(">");
                Emit("args[" + j + "]");
             }
-            EmitLine(");");
+            Emit(");");
+            EmitLine(isCtor ? " return; }" : "");
          }
          EmitLine("throw new Error('SharpJS: Failed to match method overload. This can be due to differences in C#/JS type system.');");
 
@@ -356,22 +362,33 @@ class SharpJsHelpers {{
          EmitLine();
       }
 
-      private void HandleMethodDeclaration(MethodDeclarationSyntax method, string emittedNameOptionalOverride) {
+      private void HandleMethodDeclaration(BaseMethodDeclarationSyntax method, string emittedName) {
          HandleModifierList(method.Modifiers);
-         Emit(emittedNameOptionalOverride ?? method.Identifier.Text);
+         Emit(emittedName);
          HandleParenthesizedParameterList(method.ParameterList);
-         Emit(" : ");
-         HandleEmitTypeIdentifier(method.ReturnType);
+
+         TypeSyntax returnType = null;
+         if (method is MethodDeclarationSyntax mds) {
+            Emit(" : ");
+            HandleEmitTypeIdentifier(mds.ReturnType);
+            returnType = mds.ReturnType;
+         }
          Emit(" ");
          if (method.Body != null) {
             HandleBlock(method.Body, true);
          } else {
-            Emit("{ return ");
-            HandleExpressionDescent(method.ExpressionBody.Expression);
-            EmitLine("; }");
+            if (returnType is PredefinedTypeSyntax pts && pts.Keyword.Kind() != SyntaxKind.VoidKeyword) {
+               Emit("{ return ");
+               HandleExpressionDescent(method.ExpressionBody.Expression);
+               EmitLine("; }");
+            } else {
+               Emit("{ ");
+               HandleExpressionDescent(method.ExpressionBody.Expression);
+               EmitLine("; }");
+            }
          }
          EmitLine();
-         if (method.Identifier.Text == "Main") {
+         if (emittedName == "Main") {
             mainFullIdentifier = method.SJSGetNamespaceLessFullEmittedIdentifier();
          }
       }

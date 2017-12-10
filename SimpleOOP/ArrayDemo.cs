@@ -5,7 +5,7 @@ namespace SimpleOOP {
       private const int N = 10;
 
       public static void Test() {
-         var x = new int[100];
+         var x = new int[N + 1];
          for (var i = 0; i < N && i < 1337; i++) {
             x[i] = i;
          }
