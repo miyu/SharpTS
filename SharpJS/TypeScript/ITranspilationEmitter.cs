@@ -725,7 +725,7 @@ class SharpJsHelpers {{
 
       private void HandleObjectCreationExpression(ObjectCreationExpressionSyntax node) {
          Emit("new ");
-         HandleExpressionDescent(node.Type);
+         HandleEmitTypeIdentifier(node.Type);
          Emit("(");
          HandleArgumentListExpression(node.ArgumentList);
          Emit(")");
