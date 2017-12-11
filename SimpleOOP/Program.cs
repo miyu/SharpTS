@@ -6,6 +6,7 @@ namespace SimpleOOP {
          LinkedListDemo.Test();
          ArrayDemo.Test();
          OverloadingDemo.Test();
+         PolymorphismDemo.Test();
       }
    }
 }

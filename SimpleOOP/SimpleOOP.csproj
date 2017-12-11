@@ -9,4 +9,8 @@
     <None Remove=".gitignore" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="PolymorphismDemo.cs" />
+  </ItemGroup>
+
 </Project>

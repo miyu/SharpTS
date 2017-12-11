@@ -216,7 +216,7 @@ class SharpJsHelpers {{
          foreach (var field in node.Members<FieldDeclarationSyntax>()) {
             HandleFieldDeclaration(field);
          }
-         HandleMethodDeclarations(node.Identifier.Text, node.Members.OfType<ConstructorDeclarationSyntax>().ToList());
+         HandleOverloadedBaseMethodGroupEmit(node.Identifier.Text, "constructor", node.Members.OfType<ConstructorDeclarationSyntax>().ToList(), true, node.BaseList != null);
          foreach (var property in node.Members.OfType<PropertyDeclarationSyntax>().ToList()) {
             HandlePropertyDeclaration(node.Identifier.Text, property);
          }
@@ -232,7 +232,8 @@ class SharpJsHelpers {{
          foreach (var field in node.Members.OfType<FieldDeclarationSyntax>()) {
             HandleFieldDeclaration(field);
          }
-         HandleMethodDeclarations(node.Identifier.Text, node.Members.OfType<ConstructorDeclarationSyntax>().ToList());
+         var ctors = node.Members.OfType<ConstructorDeclarationSyntax>().ToList();
+         HandleOverloadedBaseMethodGroupEmit(node.Identifier.Text, "constructor", ctors, true, false);
          foreach (var property in node.Members.OfType<PropertyDeclarationSyntax>().ToList()) {
             HandlePropertyDeclaration(node.Identifier.Text, property);
          }
@@ -298,16 +299,15 @@ class SharpJsHelpers {{
             if (matches.Length == 1) {
                HandleMethodDeclaration(matches[0], methodName);
             } else {
-               var isCtor = methodName == "constructor";
-               HandleOverloadedMethodGroupEmit(containingTypeName, methodName, matches, isCtor);
+               HandleOverloadedBaseMethodGroupEmit(containingTypeName, methodName, matches.ToArray(), false, false);
             }
          }
       }
 
-      private void HandleOverloadedMethodGroupEmit(string containingTypeName, string methodName, BaseMethodDeclarationSyntax[] matches, bool isCtor) {
+      private void HandleOverloadedBaseMethodGroupEmit(string containingTypeName, string methodName, IReadOnlyList<BaseMethodDeclarationSyntax> matches, bool isCtor, bool emitSuperCall) {
          string BuildName(int i) => methodName + "_SharpJs_Overload_" + i;
 
-         for (var i = 0; i < matches.Length; i++) {
+         for (var i = 0; i < matches.Count; i++) {
             Console.WriteLine("Overloaded Method: " + matches[i]);
             HandleMethodDeclaration(matches[i], BuildName(i));
          }
@@ -324,7 +324,7 @@ class SharpJsHelpers {{
          Emit("(...args: any[])");
          if (!isCtor) {
             Emit(": ");
-            for (var i = 0; i < matches.Length; i++) {
+            for (var i = 0; i < matches.Count; i++) {
                if (i != 0) Emit(" | ");
                HandleEmitTypeIdentifier(((MethodDeclarationSyntax)matches[i]).ReturnType);
             }
@@ -333,8 +333,14 @@ class SharpJsHelpers {{
          EmitLine(" {");
          Indent();
 
-         for (var i = 0; i < matches.Length; i++) {
+         if (isCtor && emitSuperCall) EmitLine("super();");
+
+         for (var i = 0; i < matches.Count; i++) {
             var match = matches[i];
+
+            if (match is ConstructorDeclarationSyntax cds && cds.Initializer != null) {
+               Console.Error.WriteLine("Warning: SharpJS only supports implicit Constructor Initializer supercalls (can't use : this() or :base()).");
+            }
 
             if (i != 0) Emit("else ");
             Emit("if (");
@@ -362,7 +368,10 @@ class SharpJsHelpers {{
             Emit(");");
             EmitLine(isCtor ? " return; }" : "");
          }
-         EmitLine("throw new Error('SharpJS: Failed to match method overload. This can be due to differences in C#/JS type system.');");
+
+         if (matches.Any()) {
+            EmitLine("throw new Error('SharpJS: Failed to match method overload. This can be due to differences in C#/JS type system.');");
+         }
 
          Unindent();
          EmitLine("}");
