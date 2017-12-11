@@ -23,29 +23,29 @@ namespace SimpleOOP {
 
       public void Append(int val) {
          var node = new LinkedListNode();
-         node.value = val;
+         node.Value = val;
          if (front == null) {
             front = node;
             return;
          }
          var current = front;
-         while (current.next != null) current = current.next;
-         current.next = node;
+         while (current.Next != null) current = current.Next;
+         current.Next = node;
       }
 
       public void Dump() {
          var current = front;
          while (current != null) {
-            Console.WriteLine(current.value);
-            current = current.next;
+            Console.WriteLine(current.Value);
+            current = current.Next;
          }
       }
 
       // Real dumb, but tests for loops with a mix of initializers and declarations
       public void ClearAndPrintProductExcludingFirstTwoAndSelfCalls() {
          int product = 1;
-         for (front = front.next, front = front?.next; front != null; front = front.next) {
-            product *= front.value;
+         for (front = front.Next, front = front?.Next; front != null; front = front.Next) {
+            product *= front.Value;
          }
          Console.WriteLine(product);
          SelfCall();
@@ -59,14 +59,16 @@ namespace SimpleOOP {
    }
 
    public class LinkedListNode {
-      public int value;
-      public LinkedListNode next;
+      private int value;
+
+      public int Value { get { return value; } set { this.value = value; } }
+      public LinkedListNode Next { get; set; }
 
       public LinkedListNode() { }
 
       public LinkedListNode(int value, LinkedListNode next) {
-         this.value = value;
-         this.next = next;
+         this.Value = value;
+         this.Next = next;
       }
    }
 }

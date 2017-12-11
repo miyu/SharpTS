@@ -218,6 +218,9 @@ class SharpJsHelpers {{
          }
          HandleMethodDeclarations(node.Identifier.Text, node.Members.OfType<MethodDeclarationSyntax>().ToList());
          HandleMethodDeclarations(node.Identifier.Text, node.Members.OfType<ConstructorDeclarationSyntax>().ToList());
+         foreach (var property in node.Members.OfType<PropertyDeclarationSyntax>().ToList()) {
+            HandlePropertyDeclaration(node.Identifier.Text, property);
+         }
 
          Unindent();
          EmitLine("}");
@@ -230,6 +233,10 @@ class SharpJsHelpers {{
             HandleFieldDeclaration(field);
          }
          HandleMethodDeclarations(node.Identifier.Text, node.Members.OfType<MethodDeclarationSyntax>().ToList());
+         HandleMethodDeclarations(node.Identifier.Text, node.Members.OfType<ConstructorDeclarationSyntax>().ToList());
+         foreach (var property in node.Members.OfType<PropertyDeclarationSyntax>().ToList()) {
+            HandlePropertyDeclaration(node.Identifier.Text, property);
+         }
 
          EmitLine("public zzz__sharpjs_clone() : " + node.Identifier.Text + " {");
          Indent();
@@ -377,20 +384,20 @@ class SharpJsHelpers {{
          if (method.Body != null) {
             HandleBlock(method.Body, true);
          } else {
-            if (returnType is PredefinedTypeSyntax pts && pts.Keyword.Kind() != SyntaxKind.VoidKeyword) {
-               Emit("{ return ");
-               HandleExpressionDescent(method.ExpressionBody.Expression);
-               EmitLine("; }");
-            } else {
-               Emit("{ ");
-               HandleExpressionDescent(method.ExpressionBody.Expression);
-               EmitLine("; }");
-            }
+            var hasExpressionBodyReturn = returnType is PredefinedTypeSyntax pts && pts.Keyword.Kind() != SyntaxKind.VoidKeyword;
+            HandleExpressionBody(method.ExpressionBody, hasExpressionBodyReturn);
          }
          EmitLine();
          if (emittedName == "Main") {
             mainFullIdentifier = method.SJSGetNamespaceLessFullEmittedIdentifier();
          }
+      }
+
+      private void HandleExpressionBody(ArrowExpressionClauseSyntax node, bool emitReturn) {
+         Emit("{ ");
+         if (emitReturn) Emit("return ");
+         HandleExpressionDescent(node.Expression);
+         EmitLine("; }");
       }
 
       private string GetMethodFullIdentifier(MethodDeclarationSyntax method) {
@@ -417,6 +424,49 @@ class SharpJsHelpers {{
             HandleEmitTypedVariable(p.Identifier.Text, p.Type);
          }
          Emit(")");
+      }
+
+      private void HandlePropertyDeclaration(string containingTypeName, PropertyDeclarationSyntax property) {
+         var isStaticProperty = HasModifier(property.Modifiers, SyntaxKind.StaticKeyword);
+         var backingStoreName = (isStaticProperty ? "s_" : "m_") + property.Identifier.Text;
+         var qualifiedBackingStoreName = (isStaticProperty ? containingTypeName : "this") + "." + backingStoreName;
+         if (property.AccessorList.Accessors.Any(a => a.Body == null && a.ExpressionBody == null)) {
+            Emit("private ");
+            if (isStaticProperty) Emit("static ");
+            Emit(backingStoreName);
+            Emit(": ");
+            HandleEmitTypeIdentifier(property.Type);
+            EmitLine(";");
+         }
+         foreach (var accessor in property.AccessorList.Accessors) {
+            var accessorKind = accessor.Keyword.Kind();
+            if (accessorKind == SyntaxKind.GetKeyword || accessorKind == SyntaxKind.SetKeyword) {
+               var isGetter = accessorKind == SyntaxKind.GetKeyword;
+               HandleModifierList(accessor.Modifiers);
+               if (isGetter) {
+                  Emit("get ");
+                  Emit(property.Identifier.Text);
+                  Emit("(): ");
+                  HandleEmitTypeIdentifier(property.Type);
+                  Emit(" ");
+               } else {
+                  Emit("set ");
+                  Emit(property.Identifier.Text);
+                  Emit("(value: ");
+                  HandleEmitTypeIdentifier(property.Type);
+                  Emit(") "); // setter can't have return type annotation
+               }
+               if (accessor.Body != null) HandleBlock(accessor.Body, true);
+               else if (accessor.ExpressionBody != null) HandleExpressionBody(accessor.ExpressionBody, isGetter);
+               else {
+                  if (isGetter) {
+                     EmitLine("{ return " + qualifiedBackingStoreName + "; }");
+                  } else {
+                     EmitLine("{ " + qualifiedBackingStoreName + " = SharpJsHelpers.valueClone(value); }");
+                  }
+               }
+            }
+         }
       }
 
       private void HandleBlock(BlockSyntax body, bool trailingNewline) {
@@ -566,7 +616,8 @@ class SharpJsHelpers {{
                   }
 
                   if (declaringSyntax is MethodDeclarationSyntax ||
-                      declaringSyntax?.Parent?.Parent is FieldDeclarationSyntax) {
+                      declaringSyntax?.Parent?.Parent is FieldDeclarationSyntax ||
+                      declaringSyntax is PropertyDeclarationSyntax) {
                      return si.Symbol.IsStatic ? kEmitStatic : kEmitThis;
                   }
                   return kEmitNothing;
@@ -842,6 +893,11 @@ class SharpJsHelpers {{
                   Emit(")");
                   return true;
             }
+         } else if (IsMatch(nameof(System), nameof(Math))) {
+            Emit("Math." + char.ToLower(symbols[5].Name[0]) + symbols[5].Name.Substring(1) + "(");
+            HandleArgumentListExpression(argumentList);
+            Emit(")");
+            return true;
          } else if (IsMatch(nameof(System), nameof(System.Collections), nameof(System.Collections.Generic), "List")) {
             var maes = (MemberAccessExpressionSyntax)node.Expression;
             switch (symbols[7].Name) {
