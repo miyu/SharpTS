@@ -216,11 +216,11 @@ class SharpJsHelpers {{
          foreach (var field in node.Members<FieldDeclarationSyntax>()) {
             HandleFieldDeclaration(field);
          }
-         HandleMethodDeclarations(node.Identifier.Text, node.Members.OfType<MethodDeclarationSyntax>().ToList());
          HandleMethodDeclarations(node.Identifier.Text, node.Members.OfType<ConstructorDeclarationSyntax>().ToList());
          foreach (var property in node.Members.OfType<PropertyDeclarationSyntax>().ToList()) {
             HandlePropertyDeclaration(node.Identifier.Text, property);
          }
+         HandleMethodDeclarations(node.Identifier.Text, node.Members.OfType<MethodDeclarationSyntax>().ToList());
 
          Unindent();
          EmitLine("}");
@@ -232,11 +232,11 @@ class SharpJsHelpers {{
          foreach (var field in node.Members.OfType<FieldDeclarationSyntax>()) {
             HandleFieldDeclaration(field);
          }
-         HandleMethodDeclarations(node.Identifier.Text, node.Members.OfType<MethodDeclarationSyntax>().ToList());
          HandleMethodDeclarations(node.Identifier.Text, node.Members.OfType<ConstructorDeclarationSyntax>().ToList());
          foreach (var property in node.Members.OfType<PropertyDeclarationSyntax>().ToList()) {
             HandlePropertyDeclaration(node.Identifier.Text, property);
          }
+         HandleMethodDeclarations(node.Identifier.Text, node.Members.OfType<MethodDeclarationSyntax>().ToList());
 
          EmitLine("public zzz__sharpjs_clone() : " + node.Identifier.Text + " {");
          Indent();
@@ -422,6 +422,10 @@ class SharpJsHelpers {{
             if (i != 0) Emit(", ");
             var p = node.Parameters[i];
             HandleEmitTypedVariable(p.Identifier.Text, p.Type);
+            if (p.Default != null) {
+               Emit(" = ");
+               HandleExpressionDescent(p.Default.Value);
+            }
          }
          Emit(")");
       }
