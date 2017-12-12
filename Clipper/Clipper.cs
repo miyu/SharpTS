@@ -2554,9 +2554,9 @@ namespace Clipper {
          }
       }
       //------------------------------------------------------------------------------
-
-      private TEdge GetNextInAEL(TEdge e, Direction Direction) {
-         return Direction == Direction.dLeftToRight ? e.NextInAEL : e.PrevInAEL;
+      // HACK miyu: Direction Direction => Direction direction for transpile
+      private TEdge GetNextInAEL(TEdge e, Direction direction) {
+         return direction == Direction.dLeftToRight ? e.NextInAEL : e.PrevInAEL;
       }
       //------------------------------------------------------------------------------
 
