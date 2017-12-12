@@ -973,7 +973,9 @@ class SharpJsHelpers {{
          bool IsMatch(params string[] path) => symbols.Count == 3 + path.Length + 1 && symbols.Skip(3).Take(path.Length).Select(s => s.Name).SequenceEqual(path);
 
          var subject = node.Expression;
-         if (IsMatch(nameof(System), nameof(System.Collections), nameof(System.Collections.Generic), "List")) {
+         if (IsMatch(nameof(System), nameof(System.Collections), nameof(System.Collections.Generic), "List") ||
+             IsMatch(nameof(System), nameof(System.Collections), nameof(System.Collections.Generic), "IReadOnlyList") ||
+             IsMatch(nameof(System), nameof(System.Collections), nameof(System.Collections.Generic), "IReadOnlyCollection")) {
             switch (symbols[7].Name) {
                case nameof(List<object>.Count):
                   HandleExpressionDescent(subject);
