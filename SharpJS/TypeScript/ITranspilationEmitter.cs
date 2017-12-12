@@ -715,7 +715,41 @@ class SharpJsHelpers {{
                EmitLine("});");
                break;
             case SwitchStatementSyntax n:
-               EmitLine("// SJSTODO: Switches not implemented");
+               Emit("switch (");
+               HandleExpressionDescent(n.Expression);
+               EmitLine(") {");
+               Indent();
+
+               foreach (var section in n.Sections) {
+                  for (var i = 0; i < section.Labels.Count; i++) {
+                     if (i != 0) EmitLine();
+                     var label = section.Labels[i];
+                     if (label is CaseSwitchLabelSyntax csls) {
+                        Emit("case ");
+                        HandleExpressionDescent(csls.Value);
+                        Emit(": ");
+                     } else if (label is DefaultSwitchLabelSyntax dsls) {
+                        Emit("default: ");
+                     }
+                  }
+
+                  if (section.Statements.Count == 1 && section.Statements[0] is BlockSyntax bs) {
+                     HandleStatement(bs);
+                  } else {
+                     EmitLine("{");
+                     Indent();
+
+                     foreach (var child in section.Statements) {
+                        HandleStatement(child);
+                     }
+
+                     Unindent();
+                     EmitLine("}");
+                  }
+               }
+
+               Unindent();
+               EmitLine("}");
                break;
             case EmptyStatementSyntax n:
                Emit("{}");
