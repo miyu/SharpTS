@@ -65,6 +65,7 @@ namespace SharpJS.TypeScript {
 
             finalOutput.AppendLine(
 $@"/* SharpJS - Emitted on {DateTime.Now} */
+type OutRefParam<T> = {{ read: () => T; write: (val: T) => T; }};
 class SharpJsHelpers {{ 
    static conditionalAccess(val, next) {{ 
       return val ? next(val) : val;
@@ -82,6 +83,11 @@ class SharpJsHelpers {{
       if (typeof(type) === 'string') return typeof(x) == type;
       if (typeof(type) === 'function') return x instanceof type;
       return false;
+   }}
+   static readThenExec<T>(read: () => T, exec: (val: T) => void ): T {{
+      const res : T = read();
+      exec(res);
+      return res;
    }}
 }}
 ");
@@ -299,7 +305,10 @@ class SharpJsHelpers {{
             if (matches.Length == 1) {
                HandleMethodDeclaration(matches[0], methodName);
             } else {
-               HandleOverloadedBaseMethodGroupEmit(containingTypeName, methodName, matches.ToArray(), false, false);
+               // Emit groups of static vs instance separately
+               foreach (var g in matches.GroupBy(m => HasModifier(m.Modifiers, SyntaxKind.StaticKeyword))) {
+                  HandleOverloadedBaseMethodGroupEmit(containingTypeName, methodName, g.ToArray(), false, false);
+               }
             }
          }
       }
@@ -393,7 +402,7 @@ class SharpJsHelpers {{
          if (method.Body != null) {
             HandleBlock(method.Body, true);
          } else {
-            var hasExpressionBodyReturn = returnType is PredefinedTypeSyntax pts && pts.Keyword.Kind() != SyntaxKind.VoidKeyword;
+            var hasExpressionBodyReturn = !(returnType is PredefinedTypeSyntax pts && pts.Keyword.Kind() == SyntaxKind.VoidKeyword);
             HandleExpressionBody(method.ExpressionBody, hasExpressionBodyReturn);
          }
          EmitLine();
@@ -430,13 +439,22 @@ class SharpJsHelpers {{
          for (var i = 0; i < node.Parameters.Count; i++) {
             if (i != 0) Emit(", ");
             var p = node.Parameters[i];
-            HandleEmitTypedVariable(p.Identifier.Text, p.Type);
+            HandleEmitParameterType(p);
             if (p.Default != null) {
                Emit(" = ");
                HandleExpressionDescent(p.Default.Value);
             }
          }
          Emit(")");
+      }
+
+      private void HandleEmitParameterType(ParameterSyntax node) {
+         var outRef = HasModifier(node.Modifiers, SyntaxKind.OutKeyword) || HasModifier(node.Modifiers, SyntaxKind.RefKeyword);
+         Emit(node.Identifier.Text);
+         Emit(" : ");
+         if (outRef) Emit("OutRefParam<");
+         HandleEmitTypeIdentifier(node.Type);
+         if (outRef) Emit(">");
       }
 
       private void HandlePropertyDeclaration(string containingTypeName, PropertyDeclarationSyntax property) {
@@ -513,6 +531,10 @@ class SharpJsHelpers {{
                HandleExpressionDescent(n.Condition);
                Emit(") ");
                HandleStatement(n.Statement);
+               if (n.Else != null) {
+                  Emit("else ");
+                  HandleStatement(n.Else.Statement);
+               }
                break;
             case WhileStatementSyntax n:
                Emit("while (");
@@ -617,35 +639,7 @@ class SharpJsHelpers {{
                Emit(n.Token.Text);
                break;
             case IdentifierNameSyntax n:
-               const int kEmitThis = 0, kEmitStatic = 1, kEmitNothing = 2;
-
-               var si = model.GetSymbolInfo(n);
-               var declaringSyntax = si.Symbol.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax();
-
-               int CheckRequiredAmbuityResolution() {
-                  // If on RHS of . e.g. b of a.b, no need for this.
-                  if (node.Parent is MemberAccessExpressionSyntax maes && maes.Expression != n) {
-                     return kEmitNothing;
-                  }
-
-                  if (declaringSyntax is MethodDeclarationSyntax ||
-                      declaringSyntax?.Parent?.Parent is FieldDeclarationSyntax ||
-                      declaringSyntax is PropertyDeclarationSyntax) {
-                     return si.Symbol.IsStatic ? kEmitStatic : kEmitThis;
-                  }
-                  return kEmitNothing;
-               }
-
-               var ambiguityResolution = CheckRequiredAmbuityResolution();
-               if (ambiguityResolution == kEmitThis) Emit("this.");
-               else if (ambiguityResolution == kEmitStatic) {
-                  var clazz = declaringSyntax.Ancestors().OfType<ClassDeclarationSyntax>().FirstOrDefault();
-                  var struzt = declaringSyntax.Ancestors().OfType<StructDeclarationSyntax>().FirstOrDefault();
-                  if (clazz != null) HandleEmitTypeIdentifier(clazz);
-                  if (struzt != null) HandleEmitTypeIdentifier(struzt);
-                  Emit(".");
-               }
-               Emit(n.Identifier.Text);
+               HandleIdentifierName(n);
                break;
             case InterpolatedStringExpressionSyntax n:
                HandleInterpolatedStringExpression(n);
@@ -663,12 +657,10 @@ class SharpJsHelpers {{
                HandleMemberAccessExpression(n);
                break;
             case PrefixUnaryExpressionSyntax n:
-               Emit(n.OperatorToken.Text);
-               HandleExpressionDescent(n.Operand);
+               HandleUnaryExpression(n.Operand, n.OperatorToken, true);
                break;
             case PostfixUnaryExpressionSyntax n:
-               HandleExpressionDescent(n.Operand);
-               Emit(n.OperatorToken.Text);
+               HandleUnaryExpression(n.Operand, n.OperatorToken, false);
                break;
             case BinaryExpressionSyntax n:
                HandleExpressionDescent(n.Left);
@@ -744,11 +736,72 @@ class SharpJsHelpers {{
          Emit(")");
       }
 
+      private void HandleUnaryExpression(ExpressionSyntax operand, SyntaxToken operatorToken, bool isPrefix) {
+         var ins = operand as IdentifierNameSyntax;
+         var isOutRefWrite = ins != null &&
+                             model.GetSymbolInfo(ins).Symbol.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax() is ParameterSyntax ps &&
+                             (HasModifier(ps.Modifiers, SyntaxKind.OutKeyword) || HasModifier(ps.Modifiers, SyntaxKind.RefKeyword));
+
+         if (isOutRefWrite) {
+
+            if (isPrefix) {
+               Emit(ins.Identifier.Text);
+               Emit(".write(");
+               if (operatorToken.Text.Length == 1) {
+                  Emit(operatorToken.Text); // e.g. -, +
+                  Emit(ins.Identifier.Text);
+                  Emit(".read()");
+               } else {
+                  Emit(ins.Identifier.Text);
+                  Emit(".read() ");
+                  Emit(operatorToken.Text.Substring(1)); // e.g. --, ++ => -, +
+                  Emit(" 1");
+               }
+               Emit(")");
+            } else {
+               Emit("SharpJsHelpers.readThenExec(() => ");
+               Emit(ins.Identifier.Text);
+               Emit(".read(), val => ");
+               Emit(ins.Identifier.Text);
+               Emit(".write(val ");
+               Emit(operatorToken.Text.Substring(1)); // e.g. --, ++ => -, +
+               Emit(" 1))");
+            }
+         } else {
+            if (isPrefix) {
+               Emit(operatorToken.Text);
+               HandleExpressionDescent(operand);
+            } else {
+               HandleExpressionDescent(operand);
+               Emit(operatorToken.Text);
+            }
+         }
+      }
+
       private void HandleSimpleAssignmentExpression(AssignmentExpressionSyntax node) {
-         HandleExpressionDescent(node.Left);
-         Emit(" ");
-         Emit(node.OperatorToken.Text);
-         Emit(" ");
+         // detect if write to left.
+         var ins = node.Left as IdentifierNameSyntax;
+         var isOutRefWriteToLeft = ins != null &&
+                                   model.GetSymbolInfo(ins).Symbol.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax() is ParameterSyntax ps &&
+                                   (HasModifier(ps.Modifiers, SyntaxKind.OutKeyword) || HasModifier(ps.Modifiers, SyntaxKind.RefKeyword));
+
+         if (isOutRefWriteToLeft) {
+            Emit(ins.Identifier.Text);
+            Emit(".write(");
+            if (node.OperatorToken.Text.Length != 1) { // e.g. +=, -=, /=
+               Emit(ins.Identifier.Text);
+               Emit(".read() ");
+               Emit(node.OperatorToken.Text.Substring(0, node.OperatorToken.Text.Length - 1));
+               Emit(" ");
+            }
+         } else {
+            HandleExpressionDescent(node.Left);
+            Emit(" ");
+            Emit(node.OperatorToken.Text);
+            Emit(" ");
+         }
+
+         // write RHS
          var rhsTi = model.GetTypeInfo(node.Right);
          var rhsType = rhsTi.Type ?? rhsTi.ConvertedType;
          if (rhsType.IsValueType) {
@@ -757,6 +810,11 @@ class SharpJsHelpers {{
             Emit(")");
          } else {
             HandleExpressionDescent(node.Right);
+         }
+
+         // close out/ref write
+         if (isOutRefWriteToLeft) {
+            Emit(")");
          }
       }
 
@@ -776,13 +834,65 @@ class SharpJsHelpers {{
       }
 
       private void HandleArgumentExpression(ArgumentSyntax node) {
-         HandleExpressionDescent(node.Expression);
+         if (node.RefOrOutKeyword.Kind() != 0) {
+            // out or ref. Not necessarily of an identifier node! E.g. can be to a struct member
+            Emit("{ read: () => { return SharpJsHelpers.valueClone(");
+            HandleExpressionDescent(node.Expression);
+            Emit("); }, write: (__value) => { return SharpJsHelpers.valueClone(");
+            HandleExpressionDescent(node.Expression);
+            Emit(" = __value); } }");
+         } else {
+            HandleExpressionDescent(node.Expression);
+         }
       }
 
       private void HandleArgumentListExpression(BaseArgumentListSyntax node) {
          for (var i = 0; i < node.Arguments.Count; i++) {
             if (i != 0) Emit(", ");
             HandleArgumentExpression(node.Arguments[i]);
+         }
+      }
+
+      private void HandleIdentifierName(IdentifierNameSyntax n) {
+         const int kEmitThis = 0, kEmitStatic = 1, kEmitNothing = 2, kEmitOutRefRead = 3;
+
+         var si = model.GetSymbolInfo(n);
+         var declaringSyntax = si.Symbol.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax();
+
+         int CheckRequiredAmbuityResolution() {
+            // If on RHS of . e.g. b of a.b, no need for this.
+            if (n.Parent is MemberAccessExpressionSyntax maes && maes.Expression != n) {
+               return kEmitNothing;
+            }
+
+            if (declaringSyntax is MethodDeclarationSyntax ||
+                declaringSyntax?.Parent?.Parent is FieldDeclarationSyntax ||
+                declaringSyntax is PropertyDeclarationSyntax) {
+               return si.Symbol.IsStatic ? kEmitStatic : kEmitThis;
+            }
+
+            if (declaringSyntax is ParameterSyntax ps) {
+               // note: write cases are handled in AssignmentExpressionSyntax, PostfixUnaryExpressionSyntax, PrefixUnaryExpressionSyntax.
+               // So no need to handle here.
+               if (HasModifier(ps.Modifiers, SyntaxKind.OutKeyword) || HasModifier(ps.Modifiers, SyntaxKind.RefKeyword)) {
+                  return kEmitOutRefRead;
+               }
+            }
+            return kEmitNothing;
+         }
+
+         var ambiguityResolution = CheckRequiredAmbuityResolution();
+         if (ambiguityResolution == kEmitThis) Emit("this.");
+         else if (ambiguityResolution == kEmitStatic) {
+            var clazz = declaringSyntax.Ancestors().OfType<ClassDeclarationSyntax>().FirstOrDefault();
+            var struzt = declaringSyntax.Ancestors().OfType<StructDeclarationSyntax>().FirstOrDefault();
+            if (clazz != null) HandleEmitTypeIdentifier(clazz);
+            if (struzt != null) HandleEmitTypeIdentifier(struzt);
+            Emit(".");
+         }
+         Emit(n.Identifier.Text);
+         if (ambiguityResolution == kEmitOutRefRead) {
+            Emit(".read()");
          }
       }
 

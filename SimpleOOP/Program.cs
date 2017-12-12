@@ -7,6 +7,7 @@ namespace SimpleOOP {
          ArrayDemo.Test();
          OverloadingDemo.Test();
          PolymorphismDemo.Test();
+         OutRefDemo.Test();
       }
    }
 }
