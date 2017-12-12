@@ -1035,6 +1035,11 @@ class SharpJsHelpers {{
                   HandleArgumentListExpression(argumentList);
                   Emit(")");
                   return true;
+               case nameof(List<object>.Reverse):
+                  HandleExpressionDescent(maes.Expression);
+                  Emit(".reverse(");
+                  Emit(")");
+                  return true;
             }
          }
          return false;
