@@ -89,6 +89,9 @@ class SharpJsHelpers {{
       exec(res);
       return res;
    }}
+   static booleanXor(x: boolean, y: boolean): boolean {{
+      return x != y && (x || y);
+   }}
 }}
 ");
             finalOutput.AppendLine();
@@ -663,6 +666,18 @@ class SharpJsHelpers {{
                HandleUnaryExpression(n.Operand, n.OperatorToken, false);
                break;
             case BinaryExpressionSyntax n:
+               if (n.OperatorToken.Text == "^") {
+                  var lhsTi = model.GetTypeInfo(n.Left);
+                  if (lhsTi.Type.SpecialType == SpecialType.System_Boolean) {
+                     Emit("SharpJsHelpers.booleanXor(");
+                     HandleExpressionDescent(n.Left);
+                     Emit(", ");
+                     HandleExpressionDescent(n.Right);
+                     Emit(")");
+                     break;
+                  }
+               }
+
                HandleExpressionDescent(n.Left);
                Emit(" ");
                if (n.OperatorToken.Text == "is") Emit("instanceof");
