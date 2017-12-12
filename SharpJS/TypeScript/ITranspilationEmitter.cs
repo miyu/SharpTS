@@ -509,7 +509,7 @@ class SharpJsHelpers {{
          if (outRef) Emit(">");
       }
 
-      private bool TryGetOperatorMethodName(SyntaxToken operatorKeyword, int arity, out string methodName) {
+      private bool TryGetOperatorMethodName(SyntaxToken operatorKeyword, int arity, bool isPrefix, out string methodName) {
          switch(operatorKeyword.Kind()) {
             case SyntaxKind.EqualsEqualsToken:
                methodName = "opEquals";
@@ -517,7 +517,7 @@ class SharpJsHelpers {{
             case SyntaxKind.ExclamationEqualsToken:
                methodName = "opNotEquals";
                return true;
-            case SyntaxKind.MinusToken when arity == 1:
+            case SyntaxKind.MinusToken when arity == 1 && isPrefix:
                methodName = "opNegate";
                return true;
             default:
@@ -527,7 +527,7 @@ class SharpJsHelpers {{
       }
 
       private void HandleOperatorDeclaration(string containingTypeName, OperatorDeclarationSyntax node) {
-         if (TryGetOperatorMethodName(node.OperatorToken, node.ParameterList.Parameters.Count, out string methodName)) {
+         if (TryGetOperatorMethodName(node.OperatorToken, node.ParameterList.Parameters.Count, true, out string methodName)) {
             HandleMethodDeclaration(node, methodName);
 
             Emit("public ");
@@ -758,13 +758,35 @@ class SharpJsHelpers {{
             case MemberAccessExpressionSyntax n:
                HandleMemberAccessExpression(n);
                break;
-            case PrefixUnaryExpressionSyntax n:
+            case PrefixUnaryExpressionSyntax n: {
+               if (TryGetOperatorMethodName(n.OperatorToken, 1, true, out string operatorMethodName)) {
+                  var si = model.GetSymbolInfo(n);
+                  if (si.Symbol.Locations.Length != 0) {
+                     HandleExpressionDescent(n.Operand);
+                     Emit(".");
+                     Emit(operatorMethodName);
+                     Emit("()");
+                     break;
+                  }
+               }
                HandleUnaryExpression(n.Operand, n.OperatorToken, true);
                break;
-            case PostfixUnaryExpressionSyntax n:
+            }
+            case PostfixUnaryExpressionSyntax n: {
+               if (TryGetOperatorMethodName(n.OperatorToken, 1, false, out string operatorMethodName)) {
+                  var si = model.GetSymbolInfo(n);
+                  if (si.Symbol.Locations.Length != 0) {
+                     HandleExpressionDescent(n.Operand);
+                     Emit(".");
+                     Emit(operatorMethodName);
+                     Emit("()");
+                     break;
+                  }
+               }
                HandleUnaryExpression(n.Operand, n.OperatorToken, false);
                break;
-            case BinaryExpressionSyntax n:
+            }
+            case BinaryExpressionSyntax n: {
                if (n.OperatorToken.Text == "^") {
                   var lhsTi = model.GetTypeInfo(n.Left);
                   if (lhsTi.Type.SpecialType == SpecialType.System_Boolean) {
@@ -777,7 +799,7 @@ class SharpJsHelpers {{
                   }
                }
 
-               if (TryGetOperatorMethodName(n.OperatorToken, 2, out string operatorMethodName)) {
+               if (TryGetOperatorMethodName(n.OperatorToken, 2, false, out string operatorMethodName)) {
                   var si = model.GetSymbolInfo(n);
                   if (si.Symbol.Locations.Length != 0) {
                      Emit("SharpJsHelpers.tryBinaryOperator(");
@@ -803,6 +825,7 @@ class SharpJsHelpers {{
                Emit(" ");
                HandleExpressionDescent(n.Right);
                break;
+            }
             case ConditionalAccessExpressionSyntax n:
                // this is probably broken.
                Emit("SharpJsHelpers.conditionalAccess(");
