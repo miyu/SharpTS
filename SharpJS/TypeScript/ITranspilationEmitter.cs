@@ -218,6 +218,10 @@ class SharpJsHelpers {{
       // }
 
       private void HandleClassDeclaration(ClassDeclarationSyntax node) {
+         foreach (var nestedEnum in node.Members.OfType<EnumDeclarationSyntax>()) {
+            HandleEnumDeclaration(nestedEnum);
+         }
+
          var className = node.Identifier.Text;
          Emit("export class ");
          Emit(className + " ");
