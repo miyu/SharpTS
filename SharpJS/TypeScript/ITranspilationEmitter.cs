@@ -917,11 +917,18 @@ class SharpJsHelpers {{
       }
 
       private void HandleObjectCreationExpression(ObjectCreationExpressionSyntax node) {
-         Emit("new ");
-         HandleEmitTypeIdentifier(node.Type);
-         Emit("(");
-         HandleArgumentListExpression(node.ArgumentList);
-         Emit(")");
+         var si = model.GetSymbolInfo(node.Type);
+         var symbolPath = si.Symbol.GetPath();
+
+         if (TryEmitterLanguageApiConstructorOverrides(symbolPath, node.Type, node.ArgumentList)) {
+            // override handled emit
+         } else {
+            Emit("new ");
+            HandleEmitTypeIdentifier(node.Type);
+            Emit("(");
+            HandleArgumentListExpression(node.ArgumentList);
+            Emit(")");
+         }
       }
 
       private void HandleUnaryExpression(ExpressionSyntax operand, SyntaxToken operatorToken, bool isPrefix) {
@@ -1127,6 +1134,26 @@ class SharpJsHelpers {{
             default:
                throw new NotSupportedException(node.Kind().ToString());
          }
+      }
+
+      private bool TryEmitterLanguageApiConstructorOverrides(IReadOnlyList<ISymbol> symbols, TypeSyntax type, ArgumentListSyntax argumentList) {
+         Trace.Assert(symbols[0].Kind == SymbolKind.Assembly);
+         Trace.Assert(symbols[1].Kind == SymbolKind.NetModule);
+         Trace.Assert(symbols[2].Kind == SymbolKind.Namespace); //global ns
+         if (symbols[3].Kind != SymbolKind.Namespace) return false;
+
+         bool IsMatch(params string[] path) => symbols.Count == 3 + path.Length + 1 && symbols.Skip(3).Take(path.Length).Select(s => s.Name).SequenceEqual(path);
+
+         if (IsMatch(nameof(System), nameof(System.Collections), nameof(System.Collections.Generic))) {
+            switch (symbols[6].Name) {
+               case "List":
+                  Emit("new ");
+                  HandleEmitTypeIdentifier(type);
+                  Emit("()"); // forego capacity arg
+                  return true;
+            }
+         }
+         return false;
       }
 
       private bool TryEmitterLanguageApiGetterOverrides(IReadOnlyList<ISymbol> symbols, MemberAccessExpressionSyntax node) {
