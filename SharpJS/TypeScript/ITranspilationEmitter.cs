@@ -867,10 +867,11 @@ class SharpJsHelpers {{
       }
 
       private void HandleArgumentExpression(ArgumentSyntax node) {
+            Debugger.Break();
          // If we're passing to an out/ref arg what's already an out/ref arg, just pass what was given to us
          if (node.Parent is ArgumentListSyntax als && als.Parent is InvocationExpressionSyntax ies) {
             var methodSymbolInfo = model.GetSymbolInfo(ies.Expression);
-            var nodeSymbolInfo = model.GetSymbolInfo(node);
+            var nodeSymbolInfo = model.GetSymbolInfo(node.Expression);
             if (methodSymbolInfo.Symbol is IMethodSymbol methodSymbol && 
                 node.Expression is IdentifierNameSyntax ins &&
                 nodeSymbolInfo.Symbol is IParameterSymbol ps) {
