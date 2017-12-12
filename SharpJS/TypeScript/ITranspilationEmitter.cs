@@ -93,7 +93,7 @@ class SharpJsHelpers {{
    static booleanXor(x: boolean, y: boolean): boolean {{
       return x != y && (x || y);
    }}
-   static setCapacity(arr: Array, capacity: number): number {{
+   static setCapacity<T>(arr: Array<T>, capacity: number): number {{
       if (arr.length > capacity) arr.length = capacity; // don't resize upward.
       return capacity;
    }}
