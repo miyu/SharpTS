@@ -867,13 +867,27 @@ class SharpJsHelpers {{
       }
 
       private void HandleArgumentExpression(ArgumentSyntax node) {
+         // If we're passing to an out/ref arg what's already an out/ref arg, just pass what was given to us
+         if (node.Parent is ArgumentListSyntax als && als.Parent is InvocationExpressionSyntax ies) {
+            var methodSymbolInfo = model.GetSymbolInfo(ies.Expression);
+            var nodeSymbolInfo = model.GetSymbolInfo(node);
+            if (methodSymbolInfo.Symbol is IMethodSymbol methodSymbol && 
+                node.Expression is IdentifierNameSyntax ins &&
+                nodeSymbolInfo.Symbol is IParameterSymbol ps) {
+               var argIndex = als.Arguments.IndexOf(node);
+               if (methodSymbol.Parameters[argIndex].RefKind != RefKind.None && ps.RefKind != RefKind.None) {
+                  Emit(ins.Identifier.Text);
+                  return;
+               }
+            }
+         }
          if (node.RefOrOutKeyword.Kind() != 0) {
             // out or ref. Not necessarily of an identifier node! E.g. can be to a struct member
             Emit("{ read: () => { return SharpJsHelpers.valueClone(");
             HandleExpressionDescent(node.Expression);
-            Emit("); }, write: (__value) => { return SharpJsHelpers.valueClone(");
+            Emit("); }, write: (__value) => { ");
             HandleExpressionDescent(node.Expression);
-            Emit(" = __value); } }");
+            Emit(" = __value; return SharpJsHelpers.valueClone(__value); } }");
          } else {
             HandleExpressionDescent(node.Expression);
          }
