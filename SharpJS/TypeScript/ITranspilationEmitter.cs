@@ -251,6 +251,9 @@ class SharpJsHelpers {{
             HandlePropertyDeclaration(node.Identifier.Text, property);
          }
          HandleMethodDeclarations(node.Identifier.Text, node.Members.OfType<MethodDeclarationSyntax>().ToList());
+         foreach (var op in node.Members.OfType<OperatorDeclarationSyntax>()) {
+            HandleOperatorDeclaration(op);
+         }
 
          Unindent();
          EmitLine("}");
@@ -268,6 +271,9 @@ class SharpJsHelpers {{
             HandlePropertyDeclaration(node.Identifier.Text, property);
          }
          HandleMethodDeclarations(node.Identifier.Text, node.Members.OfType<MethodDeclarationSyntax>().ToList());
+         foreach (var op in node.Members.OfType<OperatorDeclarationSyntax>()) {
+            HandleOperatorDeclaration(op);
+         }
 
          EmitLine("public zzz__sharpjs_clone() : " + node.Identifier.Text + " {");
          Indent();
@@ -496,6 +502,31 @@ class SharpJsHelpers {{
          if (outRef) Emit(">");
       }
 
+      private bool TryGetOperatorMethodName(SyntaxToken operatorKeyword, int arity, out string methodName) {
+         switch(operatorKeyword.Kind()) {
+            case SyntaxKind.EqualsEqualsToken:
+               methodName = "opEquals";
+               return true;
+            case SyntaxKind.ExclamationEqualsToken:
+               methodName = "opNotEquals";
+               return true;
+            case SyntaxKind.MinusToken when arity == 1:
+               methodName = "opNegate";
+               return true;
+            default:
+               methodName = null;
+               return false;
+         }
+      }
+
+      private void HandleOperatorDeclaration(OperatorDeclarationSyntax node) {
+         if (TryGetOperatorMethodName(node.OperatorToken, node.ParameterList.Parameters.Count, out string methodName)) {
+            HandleMethodDeclaration(node, methodName);
+         } else {
+            Console.Error.WriteLine("Warning! Operator not support: " + node);
+         }
+      }
+
       private void HandlePropertyDeclaration(string containingTypeName, PropertyDeclarationSyntax property) {
          var isStaticProperty = HasModifier(property.Modifiers, SyntaxKind.StaticKeyword);
          var backingStoreName = (isStaticProperty ? "s_" : "m_") + property.Identifier.Text;
@@ -717,6 +748,8 @@ class SharpJsHelpers {{
                HandleExpressionDescent(n.Left);
                Emit(" ");
                if (n.OperatorToken.Text == "is") Emit("instanceof");
+               else if (n.OperatorToken.Text == "==") Emit("===");
+               else if (n.OperatorToken.Text == "!=") Emit("!==");
                else Emit(n.OperatorToken.Text);
                Emit(" ");
                HandleExpressionDescent(n.Right);
