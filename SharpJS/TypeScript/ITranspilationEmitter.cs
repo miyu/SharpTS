@@ -1099,6 +1099,7 @@ class SharpJsHelpers {{
          if (nts != null) {
             switch (nts.SJSGetFullEmittedIdentifier()) {
                case "System.Collections.Generic.List":
+               case "System.Collections.Generic.IReadOnlyList":
                   if (isSharpJsHelperTypeCheckArg) {
                      Emit("Array");
                   } else {
