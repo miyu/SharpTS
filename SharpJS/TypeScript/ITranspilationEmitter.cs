@@ -705,14 +705,12 @@ class SharpJsHelpers {{
                EmitLine();
                break;
             case ForEachStatementSyntax n:
+               Emit("for (let ");
+               Emit(n.Identifier.Text); // lhs of for of can't use type annotation in TS
+               Emit(" of ");
                HandleExpressionDescent(n.Expression);
-               Emit(".forEach((");
-               HandleEmitTypedVariable(n.Identifier.Text, n.Type);
-               EmitLine(") => {");
-               Indent();
+               Emit(") ");
                HandleStatement(n.Statement);
-               Unindent();
-               EmitLine("});");
                break;
             case SwitchStatementSyntax n:
                Emit("switch (");
