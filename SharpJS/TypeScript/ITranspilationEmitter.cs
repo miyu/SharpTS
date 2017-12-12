@@ -101,6 +101,9 @@ class SharpJsHelpers {{
       if (arr.length > capacity) arr.length = capacity; // don't resize upward.
       return capacity;
    }}
+   static tryBinaryOperator<T, R>(a: T, b: T, op: string, fallback: (a: T, b: T) => R) {{
+      return (op in <any>a) ? (<any>a)[op](b) : fallback(a, b);
+   }}
 }}
 ");
             finalOutput.AppendLine();
@@ -252,7 +255,7 @@ class SharpJsHelpers {{
          }
          HandleMethodDeclarations(node.Identifier.Text, node.Members.OfType<MethodDeclarationSyntax>().ToList());
          foreach (var op in node.Members.OfType<OperatorDeclarationSyntax>()) {
-            HandleOperatorDeclaration(op);
+            HandleOperatorDeclaration(node.Identifier.Text, op);
          }
 
          Unindent();
@@ -272,7 +275,7 @@ class SharpJsHelpers {{
          }
          HandleMethodDeclarations(node.Identifier.Text, node.Members.OfType<MethodDeclarationSyntax>().ToList());
          foreach (var op in node.Members.OfType<OperatorDeclarationSyntax>()) {
-            HandleOperatorDeclaration(op);
+            HandleOperatorDeclaration(node.Identifier.Text, op);
          }
 
          EmitLine("public zzz__sharpjs_clone() : " + node.Identifier.Text + " {");
@@ -442,6 +445,10 @@ class SharpJsHelpers {{
             Emit(" : ");
             HandleEmitTypeIdentifier(mds.ReturnType);
             returnType = mds.ReturnType;
+         } else if (method is OperatorDeclarationSyntax ods) {
+            Emit(" : ");
+            HandleEmitTypeIdentifier(ods.ReturnType);
+            returnType = ods.ReturnType;
          }
          Emit(" ");
          if (method.Body != null) {
@@ -519,9 +526,34 @@ class SharpJsHelpers {{
          }
       }
 
-      private void HandleOperatorDeclaration(OperatorDeclarationSyntax node) {
+      private void HandleOperatorDeclaration(string containingTypeName, OperatorDeclarationSyntax node) {
          if (TryGetOperatorMethodName(node.OperatorToken, node.ParameterList.Parameters.Count, out string methodName)) {
             HandleMethodDeclaration(node, methodName);
+
+            Emit("public ");
+            Emit(methodName);
+            Emit("(");
+            for (var i = 1; i < node.ParameterList.Parameters.Count; i++) {
+               if (i != 1) Emit(", ");
+               var p = node.ParameterList.Parameters[i];
+               Emit("operand" + i);
+               Emit(" : ");
+               HandleEmitTypeIdentifier(p.Type);
+            }
+            Emit(") : ");
+            HandleEmitTypeIdentifier(node.ReturnType);
+
+            Emit(" { return ");
+            Emit(containingTypeName);
+            Emit(".");
+            Emit(methodName);
+            Emit("(this");
+            for (var i = 1; i < node.ParameterList.Parameters.Count; i++) {
+               Emit(", ");
+               Emit("operand" + i);
+            }
+            EmitLine("); }");
+            EmitLine();
          } else {
             Console.Error.WriteLine("Warning! Operator not support: " + node);
          }
@@ -745,8 +777,25 @@ class SharpJsHelpers {{
                   }
                }
 
+               if (TryGetOperatorMethodName(n.OperatorToken, 2, out string operatorMethodName)) {
+                  var si = model.GetSymbolInfo(n);
+                  if (si.Symbol.Locations.Length != 0) {
+                     Emit("SharpJsHelpers.tryBinaryOperator(");
+                     HandleExpressionDescent(n.Left);
+                     Emit(", ");
+                     HandleExpressionDescent(n.Right);
+                     Emit(", '");
+                     Emit(operatorMethodName);
+                     Emit("', (a, b) => a ");
+                     Emit(n.OperatorToken.Text);
+                     Emit(" b)");
+                     break;
+                  }
+               }
+
                HandleExpressionDescent(n.Left);
                Emit(" ");
+
                if (n.OperatorToken.Text == "is") Emit("instanceof");
                else if (n.OperatorToken.Text == "==") Emit("===");
                else if (n.OperatorToken.Text == "!=") Emit("!==");
