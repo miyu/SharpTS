@@ -66,6 +66,7 @@ namespace SharpJS.TypeScript {
             finalOutput.AppendLine(
 $@"/* SharpJS - Emitted on {DateTime.Now} */
 type OutRefParam<T> = {{ read: () => T; write: (val: T) => T; }};
+interface IComparer<T> {{ Compare(a : T, b : T): number; }}
 class SharpJsHelpers {{ 
    static conditionalAccess(val, next) {{ 
       return val ? next(val) : val;
@@ -212,20 +213,28 @@ class SharpJsHelpers {{
          var className = node.Identifier.Text;
          Emit("export class ");
          Emit(className + " ");
+         bool hasBaseClass = false;
          if (node.BaseList != null) {
-            Emit("extends ");
-            for (var i = 0; i < node.BaseList.Types.Count; i++) {
-               if (i != 0) Emit(", ");
-               HandleEmitTypeIdentifier(node.BaseList.Types[i].Type);
+            var basesByIsInterface = node.BaseList.Types.GroupBy(t => {
+               var ti = model.GetTypeInfo(t.Type);
+               return ti.Type.TypeKind == TypeKind.Interface;
+            });
+            foreach (var (isInterface, types) in basesByIsInterface.Select(g => (g.Key, g.ToList()))) {
+               hasBaseClass |= !isInterface;
+               Emit(isInterface ? "implements " : "extends ");
+               for (var i = 0; i < types.Count; i++) {
+                  if (i != 0) Emit(", ");
+                  HandleEmitTypeIdentifier(types[i].Type);
+               }
+               Emit(" ");
             }
-            Emit(" ");
          }
          EmitLine("{");
          Indent();
          foreach (var field in node.Members<FieldDeclarationSyntax>()) {
             HandleFieldDeclaration(field);
          }
-         HandleOverloadedBaseMethodGroupEmit(node.Identifier.Text, "constructor", node.Members.OfType<ConstructorDeclarationSyntax>().ToList(), true, node.BaseList != null);
+         HandleOverloadedBaseMethodGroupEmit(node.Identifier.Text, "constructor", node.Members.OfType<ConstructorDeclarationSyntax>().ToList(), true, hasBaseClass);
          foreach (var property in node.Members.OfType<PropertyDeclarationSyntax>().ToList()) {
             HandlePropertyDeclaration(node.Identifier.Text, property);
          }
@@ -862,6 +871,7 @@ class SharpJsHelpers {{
       }
 
       private void HandleArgumentListExpression(BaseArgumentListSyntax node) {
+         //BUG: doesn't handle named args
          for (var i = 0; i < node.Arguments.Count; i++) {
             if (i != 0) Emit(", ");
             HandleArgumentExpression(node.Arguments[i]);
@@ -1055,6 +1065,17 @@ class SharpJsHelpers {{
                   Emit(".reverse(");
                   Emit(")");
                   return true;
+               case nameof(List<object>.Sort):
+                  HandleExpressionDescent(maes.Expression);
+                  Emit(".sort(");
+                  if (argumentList.Arguments.Count > 0) {
+                     Trace.Assert(argumentList.Arguments.Count == 1);
+                     Emit("(cmpLeft, cmpRight) => ");
+                     HandleExpressionDescent(argumentList.Arguments[0].Expression);
+                     Emit(".Compare(cmpLeft, cmpRight)");
+                  }
+                  Emit(")");
+                  return true;
             }
          }
          return false;
@@ -1110,8 +1131,7 @@ class SharpJsHelpers {{
             return;
          }
 
-         var nts = type as INamedTypeSymbol;
-         if (nts != null) {
+         if (type is INamedTypeSymbol nts) {
             switch (nts.SJSGetFullEmittedIdentifier()) {
                case "System.Collections.Generic.List":
                case "System.Collections.Generic.IReadOnlyList":
@@ -1155,6 +1175,15 @@ class SharpJsHelpers {{
                break;
             default:
                Emit(type.Name);
+
+               if ((nts = type as INamedTypeSymbol) != null && nts.Arity != 0 && !isSharpJsHelperTypeCheckArg) {
+                  Emit("<");
+                  for (var i = 0; i < nts.Arity; i++) {
+                     if (i != 0) Emit(", ");
+                     HandleEmitTypeIdentifier(nts.TypeArguments[i], false);
+                  }
+                  Emit(">");
+               }
                break;
          }
       }
