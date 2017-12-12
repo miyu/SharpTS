@@ -59,7 +59,7 @@ namespace SharpJS.TypeScript {
             foreach (var (path, classNames) in dependentTypeNamesByPath) {
                var relativePath = new Uri(filePath).MakeRelativeUri(new Uri(path)).ToString();
                var extensionlessRelativePath = relativePath.Substring(0, relativePath.LastIndexOf('.'));
-               finalOutput.AppendLine($"import {{ {string.Join(", ", classNames)} }} from './{extensionlessRelativePath}';");
+               finalOutput.AppendLine($"import {{ {string.Join(", ", new SortedSet<string>(classNames))} }} from './{extensionlessRelativePath}';");
             }
             if (dependentTypeNamesByPath.Any()) finalOutput.AppendLine();
 
@@ -1086,6 +1086,11 @@ class SharpJsHelpers {{
                   return kEmitOutRefRead;
                }
             }
+
+            if (declaringSyntax is BaseTypeDeclarationSyntax btds) {
+               HandlePotentialCrossFileTypeDependency(btds);
+            }
+
             return kEmitNothing;
          }
 
@@ -1258,7 +1263,7 @@ class SharpJsHelpers {{
                var methodClass = methodSymbol.ContainingType;
                var methodClassFQTN = methodClass.SJSGetFullEmittedIdentifier();
                if (fqtnToFilePath.TryGetValue(methodClassFQTN, out string dependencyFilePath)) {
-                  HandlePotentialCrossFileClassDependency(methodClass.Name, dependencyFilePath);
+                  HandlePotentialCrossFileTypeDependency(methodClass.Name, dependencyFilePath);
                   Emit(methodClass.Name);
                   Emit(".");
                   Emit(methodSymbol.Name);
@@ -1271,7 +1276,7 @@ class SharpJsHelpers {{
 
       private void HandleEmitTypeIdentifier(BaseTypeDeclarationSyntax node, bool isSharpJsHelperTypeCheckArg = false) {
          // TODO: Probably buggy with nested classes.
-         HandlePotentialCrossFileClassDependency(node);
+         HandlePotentialCrossFileTypeDependency(node);
          Emit(node.Identifier.Text);
       }
 
@@ -1315,7 +1320,7 @@ class SharpJsHelpers {{
             }
          }
 
-         HandlePotentialCrossFileClassDependency(type);
+         HandlePotentialCrossFileTypeDependency(type);
          switch (type.Name) {
             case nameof(SByte):
             case nameof(Int16):
@@ -1357,28 +1362,47 @@ class SharpJsHelpers {{
          }
       }
 
-      private void HandlePotentialCrossFileClassDependency(BaseTypeDeclarationSyntax decl) {
+      private void HandlePotentialCrossFileTypeDependency(TypeSyntax node) {
+         var si = model.GetSymbolInfo(node);
+         if (si.Symbol is ITypeSymbol ts) {
+            HandlePotentialCrossFileTypeDependency(ts);
+         }
+      }
+
+      private void HandlePotentialCrossFileTypeDependency(BaseTypeDeclarationSyntax decl) {
          var loc = decl.GetLocation().GetMappedLineSpan();
          if (loc.Path == null) {
             // not our code
             return;
          }
-         HandlePotentialCrossFileClassDependency(decl.Identifier.Text, loc.Path);
+         HandlePotentialCrossFileTypeDependency(decl.Identifier.Text, loc.Path);
       }
 
-      private void HandlePotentialCrossFileClassDependency(ITypeSymbol type) {
+      private void HandlePotentialCrossFileTypeDependency(ITypeSymbol type) {
          if (type.Locations.Length > 1) {
             throw new NotSupportedException("Partial classes not supported");
          }
+
+         if (type is IArrayTypeSymbol ats) {
+            HandlePotentialCrossFileTypeDependency(ats.ElementType);
+            return;
+         }
+
+         if (type is INamedTypeSymbol nts) {
+            foreach (var typeArg in nts.TypeArguments) {
+               HandlePotentialCrossFileTypeDependency(typeArg);
+            }
+         }
+         
          var loc = type.Locations.First().GetMappedLineSpan();
          if (loc.Path == null) {
             // not our code
             return;
          }
-         HandlePotentialCrossFileClassDependency(type.Name, loc.Path);
+         HandlePotentialCrossFileTypeDependency(type.Name, loc.Path);
       }
 
-      private void HandlePotentialCrossFileClassDependency(string className, string dependencyFilePath) {
+      private void HandlePotentialCrossFileTypeDependency(string className, string dependencyFilePath) {
          if (dependencyFilePath == this.filePath) return;
          importedClassesByPath.Add(dependencyFilePath, className);
       }
@@ -1430,6 +1454,7 @@ class SharpJsHelpers {{
             Emit(" = ");
             HandleExpressionDescent(variable.Initializer.Value);
          }
+         HandlePotentialCrossFileTypeDependency(node.Type);
       }
 
       private void HandleEmitTypedVariable(string variableName, TypeSyntax nodeType) {
