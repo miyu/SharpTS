@@ -65,7 +65,11 @@ namespace SharpJS.TypeScript {
 
             finalOutput.AppendLine(
 $@"/* SharpJS - Emitted on {DateTime.Now} */
-type OutRefParam<T> = {{ read: () => T; write: (val: T) => T; }};
+class OutRefParam<T> {{ 
+   constructor (public read: () => T, public write: (val: T) => T) {{ }}
+}}
+function createOutRefParam<T>(read: () => T, write: (val: T) => T): OutRefParam<T> {{ return new OutRefParam<T>(read, write); }}
+
 interface IComparer<T> {{ Compare(a : T, b : T): number; }}
 class SharpJsHelpers {{ 
    static conditionalAccess(val, next) {{ 
@@ -362,6 +366,7 @@ class SharpJsHelpers {{
 
          for (var i = 0; i < matches.Count; i++) {
             var match = matches[i];
+            var si = model.GetDeclaredSymbol(match);
 
             if (match is ConstructorDeclarationSyntax cds && cds.Initializer != null) {
                Console.Error.WriteLine("Warning: SharpJS only supports implicit Constructor Initializer supercalls (can't use : this() or :base()).");
@@ -374,7 +379,11 @@ class SharpJsHelpers {{
                var parameter = match.ParameterList.Parameters[j];
                Emit(" && ");
                Emit("SharpJsHelpers.TestTypeCheck(args[" + j + "], ");
-               HandleEmitTypeIdentifier(parameter.Type, true);
+               if (si.Parameters[j].RefKind != RefKind.None) {
+                  Emit("OutRefParam");
+               } else {
+                  HandleEmitTypeIdentifier(parameter.Type, true);
+               }
                Emit(")");
             }
             Emit(") ");
@@ -386,7 +395,13 @@ class SharpJsHelpers {{
             for (var j = 0; j < match.ParameterList.Parameters.Count; j++) {
                if (j != 0) Emit(", ");
                Emit("<");
-               HandleEmitTypeIdentifier(match.ParameterList.Parameters[j].Type);
+               if (si.Parameters[j].RefKind != RefKind.None) {
+                  Emit("OutRefParam<");
+                  HandleEmitTypeIdentifier(match.ParameterList.Parameters[j].Type);
+                  Emit(">");
+               } else {
+                  HandleEmitTypeIdentifier(match.ParameterList.Parameters[j].Type);
+               }
                Emit(">");
                Emit("args[" + j + "]");
             }
@@ -867,7 +882,6 @@ class SharpJsHelpers {{
       }
 
       private void HandleArgumentExpression(ArgumentSyntax node) {
-            Debugger.Break();
          // If we're passing to an out/ref arg what's already an out/ref arg, just pass what was given to us
          if (node.Parent is ArgumentListSyntax als && als.Parent is InvocationExpressionSyntax ies) {
             var methodSymbolInfo = model.GetSymbolInfo(ies.Expression);
@@ -884,11 +898,11 @@ class SharpJsHelpers {{
          }
          if (node.RefOrOutKeyword.Kind() != 0) {
             // out or ref. Not necessarily of an identifier node! E.g. can be to a struct member
-            Emit("{ read: () => { return SharpJsHelpers.valueClone(");
+            Emit("createOutRefParam(() => { return SharpJsHelpers.valueClone(");
             HandleExpressionDescent(node.Expression);
-            Emit("); }, write: (__value) => { ");
+            Emit("); }, (__value) => { ");
             HandleExpressionDescent(node.Expression);
-            Emit(" = __value; return SharpJsHelpers.valueClone(__value); } }");
+            Emit(" = __value; return SharpJsHelpers.valueClone(__value); })");
          } else {
             HandleExpressionDescent(node.Expression);
          }
