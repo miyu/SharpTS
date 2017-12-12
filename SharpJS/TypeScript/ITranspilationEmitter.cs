@@ -302,8 +302,12 @@ class SharpJsHelpers {{
       }
 
       private void HandleFieldDeclaration(FieldDeclarationSyntax field) {
-         HandleModifierList(field.Modifiers);
-         HandleVariableDeclarationStatement(field.Declaration, true);
+         // TS doesn't support e.g. private a : int, b : int. Need to split to multiple lines.
+         foreach (var v in field.Declaration.Variables) {
+            HandleModifierList(field.Modifiers);
+            HandleVariableDeclarator(field.Declaration, v);
+            EmitLine(";");
+         }
       }
 
       private bool HasModifier(SyntaxTokenList modifiers, SyntaxKind sk) => modifiers.Any(m => m.Kind() == sk);
@@ -1278,13 +1282,17 @@ class SharpJsHelpers {{
          for (var i = 0; i < node.Variables.Count; i++) {
             if (i != 0) Emit(", ");
             var variable = node.Variables[i];
-            HandleEmitTypedVariable(variable.Identifier.Text, node.Type);
-            if (variable.Initializer != null) {
-               Emit(" = ");
-               HandleExpressionDescent(variable.Initializer.Value);
-            }
+            HandleVariableDeclarator(node, variable);
          }
          if (trailingSemicolonNewline) EmitLine(";");
+      }
+
+      private void HandleVariableDeclarator(VariableDeclarationSyntax node, VariableDeclaratorSyntax variable) {
+         HandleEmitTypedVariable(variable.Identifier.Text, node.Type);
+         if (variable.Initializer != null) {
+            Emit(" = ");
+            HandleExpressionDescent(variable.Initializer.Value);
+         }
       }
 
       private void HandleEmitTypedVariable(string variableName, TypeSyntax nodeType) {
