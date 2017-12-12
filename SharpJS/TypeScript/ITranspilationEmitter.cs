@@ -93,6 +93,10 @@ class SharpJsHelpers {{
    static booleanXor(x: boolean, y: boolean): boolean {{
       return x != y && (x || y);
    }}
+   static setCapacity(arr: Array, capacity: number): number {{
+      if (arr.length > capacity) arr.length = capacity; // don't resize upward.
+      return capacity;
+   }}
 }}
 ");
             finalOutput.AppendLine();
@@ -803,6 +807,11 @@ class SharpJsHelpers {{
       }
 
       private void HandleSimpleAssignmentExpression(AssignmentExpressionSyntax node) {
+         var leftSymbolPath = ResolveExpressionInvokedSymbolPath(node.Left); // can be empty, e.g. for indexer
+         if (leftSymbolPath.Count > 0 && TryEmitterLanguageApiSetterOverrides(leftSymbolPath, node.Left, node.Right)) {
+            return;
+         }
+
          // detect if write to left.
          var ins = node.Left as IdentifierNameSyntax;
          var isOutRefWriteToLeft = ins != null &&
@@ -968,7 +977,9 @@ class SharpJsHelpers {{
          return false;
       }
 
-      private bool TryEmitterLanguageApiSetterOverrides(IReadOnlyList<ISymbol> symbols, InvocationExpressionSyntax node, ArgumentListSyntax argumentList) {
+      // BUG: Doesn't handle unary operators
+      private bool TryEmitterLanguageApiSetterOverrides(IReadOnlyList<ISymbol> symbols, ExpressionSyntax left, ExpressionSyntax right) {
+         // symbols is of left type.
          Trace.Assert(symbols[0].Kind == SymbolKind.Assembly);
          Trace.Assert(symbols[1].Kind == SymbolKind.NetModule);
          Trace.Assert(symbols[2].Kind == SymbolKind.Namespace); //global ns
@@ -976,37 +987,13 @@ class SharpJsHelpers {{
 
          bool IsMatch(params string[] path) => symbols.Count == 3 + path.Length + 1 && symbols.Skip(3).Take(path.Length).Select(s => s.Name).SequenceEqual(path);
 
-         if (IsMatch(nameof(System), nameof(System.Console))) {
-            switch (symbols[5].Name) {
-               case nameof(Console.WriteLine):
-                  Emit("console.log(");
-                  HandleArgumentListExpression(argumentList);
-                  Emit(")");
-                  return true;
-               case nameof(Console.ReadLine):
-                  Emit("prompt(\"Enter String Input:\")");
-                  return true;
-            }
-         } else if (IsMatch(nameof(System), nameof(Int32))) {
-            switch (symbols[5].Name) {
-               case nameof(int.Parse):
-                  Emit("parseInt(");
-                  HandleArgumentListExpression(argumentList);
-                  Emit(")");
-                  return true;
-            }
-         } else if (IsMatch(nameof(System), nameof(System.Collections), nameof(System.Collections.Generic), "List")) {
-            var maes = (MemberAccessExpressionSyntax)node.Expression;
+         if (IsMatch(nameof(System), nameof(System.Collections), nameof(System.Collections.Generic), "List")) {
             switch (symbols[7].Name) {
-               case nameof(List<object>.Clear):
-                  Emit("SharpJsHelpers.arrayClear(");
+               case nameof(List<object>.Capacity) when (left is MemberAccessExpressionSyntax maes):
+                  Emit("SharpJsHelpers.setCapacity(");
                   HandleExpressionDescent(maes.Expression);
-                  Emit(")");
-                  return true;
-               case nameof(List<object>.Add):
-                  HandleExpressionDescent(maes.Expression);
-                  Emit(".push(");
-                  HandleArgumentListExpression(argumentList);
+                  Emit(", ");
+                  HandleExpressionDescent(right);
                   Emit(")");
                   return true;
             }
