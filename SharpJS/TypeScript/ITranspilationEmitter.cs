@@ -76,6 +76,7 @@ class SharpJsHelpers {{
       return val ? next(val) : val;
    }}
    static valueClone(val) {{ 
+      if (typeof val !== 'object') return val;
       if (val.zzz__sharpjs_clone) return val.zzz__sharpjs_clone();
       return val;
    }}
@@ -288,6 +289,13 @@ class SharpJsHelpers {{
          EmitLine("return res;");
          Unindent();
          EmitLine("}");
+
+         EmitLine("public static default() : " + node.Identifier.Text + " {");
+         Indent();
+         EmitLine("return new " + node.Identifier.Text + "();");
+         Unindent();
+         EmitLine("}");
+
          Unindent();
          EmitLine("}");
       }
@@ -566,9 +574,7 @@ class SharpJsHelpers {{
          if (property.AccessorList.Accessors.Any(a => a.Body == null && a.ExpressionBody == null)) {
             Emit("private ");
             if (isStaticProperty) Emit("static ");
-            Emit(backingStoreName);
-            Emit(": ");
-            HandleEmitTypeIdentifier(property.Type);
+            HandleVariableDeclarator(property.Type, null, backingStoreName);
             EmitLine(";");
          }
          foreach (var accessor in property.AccessorList.Accessors) {
@@ -1476,12 +1482,59 @@ class SharpJsHelpers {{
       }
 
       private void HandleVariableDeclarator(VariableDeclarationSyntax node, VariableDeclaratorSyntax variable) {
-         HandleEmitTypedVariable(variable.Identifier.Text, node.Type);
-         if (variable.Initializer != null) {
-            Emit(" = ");
-            HandleExpressionDescent(variable.Initializer.Value);
+         HandleVariableDeclarator(node.Type, variable.Initializer, variable.Identifier.Text);
+      }
+
+      private void HandleVariableDeclarator(TypeSyntax type, EqualsValueClauseSyntax initializerOrNull, string variableName) {
+         HandleEmitTypedVariable(variableName, type);
+         Emit(" = ");
+         if (initializerOrNull != null) {
+            HandleExpressionDescent(initializerOrNull.Value);
+         } else {
+            HandleEmitTypeDefault(type);
          }
-         HandlePotentialCrossFileTypeDependency(node.Type);
+         HandlePotentialCrossFileTypeDependency(type);
+      }
+
+      private void HandleEmitTypeDefault(TypeSyntax type) {
+         var si = model.GetSymbolInfo(type);
+         if (si.Symbol is IArrayTypeSymbol ats) {
+            Emit("null");
+         } else if (si.Symbol is INamedTypeSymbol nts) {
+            switch (nts.SpecialType) {
+               case SpecialType.System_Boolean:
+                  Emit("false");
+                  return;
+               case SpecialType.System_SByte:
+               case SpecialType.System_Int16:
+               case SpecialType.System_Int32:
+               case SpecialType.System_Int64:
+               case SpecialType.System_Byte:
+               case SpecialType.System_UInt16:
+               case SpecialType.System_UInt32:
+               case SpecialType.System_UInt64:
+               case SpecialType.System_Single:
+               case SpecialType.System_Double:
+                  Emit("0");
+                  return;
+            }
+
+            if (nts.TypeKind == TypeKind.Enum) {
+               Emit("<");
+               HandleEmitTypeIdentifier(nts);
+               Emit(">");
+               Emit("0");
+               return;
+            }
+
+            if (!nts.IsValueType) {
+               Emit("null");
+               return;
+            }
+
+            HandleEmitTypeIdentifier(nts);
+            Emit(".default()");
+         }
       }
 
       private void HandleEmitTypedVariable(string variableName, TypeSyntax nodeType) {
