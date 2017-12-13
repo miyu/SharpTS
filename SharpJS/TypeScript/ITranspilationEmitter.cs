@@ -347,6 +347,9 @@ class SharpJsHelpers {{
       private void HandleMethodDeclarations(string containingTypeName, IReadOnlyList<BaseMethodDeclarationSyntax> methods) {
          var methodGroups = methods.GroupBy(m => m is MethodDeclarationSyntax mds ? mds.Identifier.Text : "constructor");
          foreach (var (methodName, matches) in methodGroups.Select(g => (g.Key, g.ToArray()))) {
+            // HACK: Don't emit GetHashCode.
+            if (methodName == nameof(Object.GetHashCode)) continue;
+
             if (matches.Length == 1) {
                HandleMethodDeclaration(matches[0], methodName);
             } else {
@@ -1339,6 +1342,11 @@ class SharpJsHelpers {{
          }
 
          if (type is INamedTypeSymbol nts) {
+            if (nts.TypeKind == TypeKind.Enum && isSharpJsHelperTypeCheckArg) {
+               HandleEmitTypeIdentifier(nts.EnumUnderlyingType, isSharpJsHelperTypeCheckArg);
+               return;
+            }
+
             switch (nts.SJSGetFullEmittedIdentifier()) {
                case "System.Collections.Generic.List":
                case "System.Collections.Generic.IReadOnlyList":
@@ -1349,6 +1357,9 @@ class SharpJsHelpers {{
                      HandleEmitTypeIdentifier(nts.TypeArguments[0]);
                      Emit(">");
                   }
+                  return;
+               case "System.Exception":
+                  Emit("Error");
                   return;
             }
          }

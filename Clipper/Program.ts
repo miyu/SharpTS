@@ -1,6 +1,6 @@
 import { Clipper, ClipType, IntPoint, PolyFillType, PolyNode, PolyTree, PolyType } from './Clipper';
 
-/* SharpJS - Emitted on 12/12/2017 1:51:48 PM */
+/* SharpJS - Emitted on 12/12/2017 9:35:07 PM */
 class OutRefParam<T> { 
    constructor (public read: () => T, public write: (val: T) => T) { }
 }
@@ -12,6 +12,7 @@ class SharpJsHelpers {
       return val ? next(val) : val;
    }
    static valueClone(val) { 
+      if (typeof val !== 'object') return val;
       if (val.zzz__sharpjs_clone) return val.zzz__sharpjs_clone();
       return val;
    }
@@ -74,7 +75,7 @@ export class Program {
       let b : Array<IntPoint> = Program.MakeRectangle(5, 5, 15, 15);
       console.log(Clipper.Area(a));
       console.log(Clipper.Area(b));
-      let clipper : Clipper = new Clipper(0);
+      let clipper : Clipper = new Clipper();
       clipper.AddPath(a, PolyType.ptClip, true);
       clipper.AddPath(b, PolyType.ptClip, true);
       let pt : PolyTree = new PolyTree();
