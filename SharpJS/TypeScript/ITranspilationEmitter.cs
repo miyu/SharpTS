@@ -361,6 +361,35 @@ class SharpJsHelpers {{
          }
       }
 
+      private SyntaxTokenList FindCommonModifiers(IEnumerable<SyntaxTokenList> modifierGroups) {
+         SyntaxKind? accessibilityModifier = null;
+         bool? isStatic = null;
+         foreach (var g in modifierGroups) {
+            bool groupStatic = false;
+            foreach (var m in g) {
+               switch (m.Kind()) {
+                  case SyntaxKind.PublicKeyword: // 8343
+                  case SyntaxKind.PrivateKeyword:
+                  case SyntaxKind.InternalKeyword:
+                  case SyntaxKind.ProtectedKeyword: // 8346
+                     accessibilityModifier = (SyntaxKind)Math.Min((int)(accessibilityModifier ?? m.Kind()), (int)m.Kind());
+                     break;
+                  case SyntaxKind.StaticKeyword:
+                     groupStatic = true;
+                     break;
+               }
+            }
+            if (isStatic.HasValue && isStatic != groupStatic) {
+               throw new Exception("Cannot find common modifiers between static vs non-static members.");
+            }
+            isStatic = groupStatic;
+         }
+         var stl = new SyntaxTokenList();
+         if (accessibilityModifier != null) stl = stl.Add(SyntaxFactory.Token(accessibilityModifier.Value));
+         if (isStatic != null && isStatic == true) stl = stl.Add(SyntaxFactory.Token(SyntaxKind.StaticKeyword));
+         return stl;
+      }
+
       private void HandleOverloadedBaseMethodGroupEmit(string containingTypeName, string methodName, IReadOnlyList<BaseMethodDeclarationSyntax> matches, bool isCtor, bool emitSuperCall) {
          string BuildName(int i) => methodName + "_SharpJs_Overload_" + i;
 
@@ -369,14 +398,18 @@ class SharpJsHelpers {{
             HandleMethodDeclaration(matches[i], BuildName(i));
          }
 
-         Emit("public ");
-         if (matches.Any(m => HasModifier(m.Modifiers, SyntaxKind.StaticKeyword))) {
-            if (!matches.All(m => HasModifier(m.Modifiers, SyntaxKind.StaticKeyword))) {
-               Console.Error.WriteLine("Warning: " + methodName + " overloads must all have same staticness for transpilation.");
+         // Emit declarations for ctor overloads
+         var commonModifiers = FindCommonModifiers(matches.Select(m => m.Modifiers));
+         for (var i = 0; i < matches.Count; i++) {
+            var method = matches[i];
+            var totalParameters = method.ParameterList.Parameters.Count;
+            var requiredParameters = totalParameters - method.ParameterList.Parameters.Count(p => p.Default != null);
+            for (var j = requiredParameters; j <= totalParameters; j++) {
+               HandleMethodDeclaration(matches[i], methodName, j, commonModifiers);
             }
-            Emit("static ");
          }
 
+         HandleModifierList(commonModifiers);
          Emit(methodName);
          Emit("(...args: any[])");
          if (!isCtor) {
@@ -392,49 +425,61 @@ class SharpJsHelpers {{
 
          if (isCtor && emitSuperCall) EmitLine("super();");
 
+         var isFirstMatch = true;
          for (var i = 0; i < matches.Count; i++) {
-            var match = matches[i];
-            var si = model.GetDeclaredSymbol(match);
+            var method = matches[i];
+            var si = model.GetDeclaredSymbol(method);
 
-            if (match is ConstructorDeclarationSyntax cds && cds.Initializer != null) {
+            if (method is ConstructorDeclarationSyntax cds && cds.Initializer != null) {
                Console.Error.WriteLine("Warning: SharpJS only supports implicit Constructor Initializer supercalls (can't use : this() or :base()).");
             }
 
-            if (i != 0) Emit("else ");
-            Emit("if (");
-            Emit("args.length == " + match.ParameterList.Parameters.Count);
-            for (var j = 0; j < match.ParameterList.Parameters.Count; j++) {
-               var parameter = match.ParameterList.Parameters[j];
-               Emit(" && ");
-               Emit("SharpJsHelpers.TestTypeCheck(args[" + j + "], ");
-               if (si.Parameters[j].RefKind != RefKind.None) {
-                  Emit("OutRefParam");
-               } else {
-                  HandleEmitTypeIdentifier(parameter.Type, true);
+            var totalParameters = method.ParameterList.Parameters.Count;
+            var requiredParameters = totalParameters - method.ParameterList.Parameters.Count(p => p.Default != null);
+            for (var overloadParameterCount = requiredParameters; overloadParameterCount <= totalParameters; overloadParameterCount++) {
+               if (!isFirstMatch) Emit("else ");
+               isFirstMatch = false;
+
+               Emit("if (");
+               Emit("args.length == " + overloadParameterCount);
+               for (var j = 0; j < overloadParameterCount; j++) {
+                  var parameter = method.ParameterList.Parameters[j];
+                  Emit(" && ");
+                  Emit("SharpJsHelpers.TestTypeCheck(args[" + j + "], ");
+                  if (si.Parameters[j].RefKind != RefKind.None) {
+                     Emit("OutRefParam");
+                  } else {
+                     HandleEmitTypeIdentifier(parameter.Type, true);
+                  }
+                  Emit(")");
                }
-               Emit(")");
-            }
-            Emit(") ");
-            Emit(isCtor ? "{ " : "return ");
-            Emit(HasModifier(match.Modifiers, SyntaxKind.StaticKeyword) ? containingTypeName : "this");
-            Emit(".");
-            Emit(BuildName(i));
-            Emit("(");
-            for (var j = 0; j < match.ParameterList.Parameters.Count; j++) {
-               if (j != 0) Emit(", ");
-               Emit("<");
-               if (si.Parameters[j].RefKind != RefKind.None) {
-                  Emit("OutRefParam<");
-                  HandleEmitTypeIdentifier(match.ParameterList.Parameters[j].Type);
+               Emit(") ");
+               Emit(isCtor ? "{ " : "return ");
+               Emit(HasModifier(method.Modifiers, SyntaxKind.StaticKeyword) ? containingTypeName : "this");
+               Emit(".");
+               Emit(BuildName(i));
+               Emit("(");
+               for (var j = 0; j < method.ParameterList.Parameters.Count; j++) {
+                  if (j != 0) Emit(", ");
+                  Emit("<");
+                  if (si.Parameters[j].RefKind != RefKind.None) {
+                     Emit("OutRefParam<");
+                     HandleEmitTypeIdentifier(method.ParameterList.Parameters[j].Type);
+                     Emit(">");
+                  } else {
+                     HandleEmitTypeIdentifier(method.ParameterList.Parameters[j].Type);
+                  }
                   Emit(">");
-               } else {
-                  HandleEmitTypeIdentifier(match.ParameterList.Parameters[j].Type);
+
+                  if (j < overloadParameterCount) {
+                     Emit("args[" + j + "]");
+                  } else {
+                     HandleExpressionDescent(method.ParameterList.Parameters[j].Default.Value);
+                  }
                }
-               Emit(">");
-               Emit("args[" + j + "]");
+               Emit(");");
+               EmitLine(isCtor ? " return; }" : "");
             }
-            Emit(");");
-            EmitLine(isCtor ? " return; }" : "");
          }
 
          if (matches.Any()) {
@@ -446,10 +491,11 @@ class SharpJsHelpers {{
          EmitLine();
       }
 
-      private void HandleMethodDeclaration(BaseMethodDeclarationSyntax method, string emittedName) {
-         HandleModifierList(method.Modifiers);
+      // Emits method with 0 optional parameters. Optimal parameters are handled via MethodGroup emit overloading.
+      private void HandleMethodDeclaration(BaseMethodDeclarationSyntax method, string emittedName, int? optDeclarationOnlyParameterLimit = null, SyntaxTokenList? modifierListOverride = null) {
+         HandleModifierList(modifierListOverride ?? method.Modifiers);
          Emit(emittedName);
-         HandleParenthesizedParameterList(method.ParameterList);
+         HandleParenthesizedParameterList(method.ParameterList, optDeclarationOnlyParameterLimit);
 
          TypeSyntax returnType = null;
          if (method is MethodDeclarationSyntax mds) {
@@ -461,6 +507,12 @@ class SharpJsHelpers {{
             HandleEmitTypeIdentifier(ods.ReturnType);
             returnType = ods.ReturnType;
          }
+
+         if (optDeclarationOnlyParameterLimit.HasValue) {
+            EmitLine(";");
+            return;
+         }
+
          Emit(" ");
          if (method.Body != null) {
             HandleBlock(method.Body, true);
@@ -497,13 +549,16 @@ class SharpJsHelpers {{
          HandleBlock(method.Body, false);
       }
 
-      private void HandleParenthesizedParameterList(ParameterListSyntax node) {
+      private void HandleParenthesizedParameterList(ParameterListSyntax node, int? optDeclarationOnlyParameterLimit = null) {
+         // declarations don't have default values. Must emit multiple signatures for them. These are then handled
+         // at the methodgroup overload resolution handler.
+         var parameterLimit = optDeclarationOnlyParameterLimit ?? node.Parameters.Count;
          Emit("(");
-         for (var i = 0; i < node.Parameters.Count; i++) {
+         for (var i = 0; i < parameterLimit; i++) {
             if (i != 0) Emit(", ");
             var p = node.Parameters[i];
             HandleEmitParameterType(p);
-            if (p.Default != null) {
+            if (p.Default != null && !optDeclarationOnlyParameterLimit.HasValue) {
                Emit(" = ");
                HandleExpressionDescent(p.Default.Value);
             }

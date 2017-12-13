@@ -1,6 +1,6 @@
 import { Clipper, ClipType, IntPoint, PolyFillType, PolyNode, PolyTree, PolyType } from './Clipper';
 
-/* SharpJS - Emitted on 12/12/2017 9:35:07 PM */
+/* SharpJS - Emitted on 12/12/2017 10:20:06 PM */
 class OutRefParam<T> { 
    constructor (public read: () => T, public write: (val: T) => T) { }
 }
@@ -45,7 +45,7 @@ class SharpJsHelpers {
 
 
 export class Program {
-   public constructor(...args: any[]) {
+   constructor(...args: any[]) {
    }
    
    private static MakeRectangle(left : number, top : number, right : number, bottom : number) : Array<IntPoint> {
