@@ -1,27 +1,27 @@
-/* SharpJS - Emitted on 12/12/2017 10:56:22 PM */
-class OutRefParam<T> { 
+/* SharpJS - Emitted on 12/12/2017 11:53:22 PM */
+export class OutRefParam<T> { 
    constructor (public read: () => T, public write: (val: T) => T) { }
 }
-function createOutRefParam<T>(read: () => T, write: (val: T) => T): OutRefParam<T> { return new OutRefParam<T>(read, write); }
+export function createOutRefParam<T>(read: () => T, write: (val: T) => T): OutRefParam<T> { return new OutRefParam<T>(read, write); }
 
 interface IComparer<T> { Compare(a : T, b : T): number; }
 class SharpJsHelpers { 
-   static conditionalAccess(val, next) { 
-      return val ? next(val) : val;
+   static conditionalAccess<T, R>(val: T, next : (x: T) => R) : R | null { 
+      return val ? next(val) : null;
    }
-   static valueClone(val) { 
+   static valueClone<T>(val: T): T { 
       if (!val || typeof val !== 'object') return val;
-      if (val.zzz__sharpjs_clone) return val.zzz__sharpjs_clone();
+      if ((<any>val).zzz__sharpjs_clone) return (<any>val).zzz__sharpjs_clone();
       return val;
    }
-   static arrayClear(arr) { 
+   static arrayClear<T>(arr: Array<T>): void { 
       while(arr.length) arr.pop();
    }
-   static TestTypeCheck(x, type) {
-      if (type === 'object') return typeof(x) == 'object' || x instanceof Object || x == null;
-      if (type === 'string') return typeof(x) == 'string' || x instanceof String;
+   static TestTypeCheck<T>(x: T, type: string | Function) {
+      if (type === 'object') return typeof(x) == 'object' || <any>x instanceof Object || <any>x == null;
+      if (type === 'string') return typeof(x) == 'string' || <any>x instanceof String;
       if (typeof(type) === 'string') return typeof(x) == type;
-      if (typeof(type) === 'function') return x instanceof type;
+      if (typeof(type) === 'function') return <any>x instanceof type;
       return false;
    }
    static readThenExec<T>(read: () => T, exec: (val: T) => void ): T {
@@ -3239,30 +3239,7 @@ export class ClipperOffset {
       }
    }
    
-   public Execute_SharpJs_Overload_0(solution : OutRefParam<Array<Array<IntPoint>>>, delta : number) : void {
-      SharpJsHelpers.arrayClear(solution.read());
-      this.FixOrientations();
-      this.DoOffset(delta);
-      let clpr : Clipper = new Clipper();
-      clpr.AddPaths(this.m_destPolys, PolyType.ptSubject, true);
-      if (delta > 0) {
-         clpr.Execute(ClipType.ctUnion, solution.read(), PolyFillType.pftPositive, PolyFillType.pftPositive);
-      }
-      else {
-         let r : IntRect = ClipperBase.GetBounds(this.m_destPolys);
-         let outer : Array<IntPoint> = new Array<IntPoint>();
-         outer.push(new IntPoint(r.left - 10, r.bottom + 10));
-         outer.push(new IntPoint(r.right + 10, r.bottom + 10));
-         outer.push(new IntPoint(r.right + 10, r.top - 10));
-         outer.push(new IntPoint(r.left - 10, r.top - 10));
-         clpr.AddPath(outer, PolyType.ptSubject, true);
-         clpr.ReverseSolution = SharpJsHelpers.valueClone(true);
-         clpr.Execute(ClipType.ctUnion, solution.read(), PolyFillType.pftNegative, PolyFillType.pftNegative);
-         if (solution.read().length > 0) solution.read().splice(0, 1);
-      }
-   }
-   
-   public Execute_SharpJs_Overload_1(solution : OutRefParam<PolyTree>, delta : number) : void {
+   public Execute_SharpJs_Overload_0(solution : OutRefParam<PolyTree>, delta : number) : void {
       solution.read().Clear();
       this.FixOrientations();
       this.DoOffset(delta);
@@ -3292,11 +3269,34 @@ export class ClipperOffset {
       }
    }
    
-   public Execute(solution : OutRefParam<Array<Array<IntPoint>>>, delta : number) : void;
+   public Execute_SharpJs_Overload_1(solution : OutRefParam<Array<Array<IntPoint>>>, delta : number) : void {
+      SharpJsHelpers.arrayClear(solution.read());
+      this.FixOrientations();
+      this.DoOffset(delta);
+      let clpr : Clipper = new Clipper();
+      clpr.AddPaths(this.m_destPolys, PolyType.ptSubject, true);
+      if (delta > 0) {
+         clpr.Execute(ClipType.ctUnion, solution.read(), PolyFillType.pftPositive, PolyFillType.pftPositive);
+      }
+      else {
+         let r : IntRect = ClipperBase.GetBounds(this.m_destPolys);
+         let outer : Array<IntPoint> = new Array<IntPoint>();
+         outer.push(new IntPoint(r.left - 10, r.bottom + 10));
+         outer.push(new IntPoint(r.right + 10, r.bottom + 10));
+         outer.push(new IntPoint(r.right + 10, r.top - 10));
+         outer.push(new IntPoint(r.left - 10, r.top - 10));
+         clpr.AddPath(outer, PolyType.ptSubject, true);
+         clpr.ReverseSolution = SharpJsHelpers.valueClone(true);
+         clpr.Execute(ClipType.ctUnion, solution.read(), PolyFillType.pftNegative, PolyFillType.pftNegative);
+         if (solution.read().length > 0) solution.read().splice(0, 1);
+      }
+   }
+   
    public Execute(solution : OutRefParam<PolyTree>, delta : number) : void;
+   public Execute(solution : OutRefParam<Array<Array<IntPoint>>>, delta : number) : void;
    public Execute(...args: any[]): void | void {
-      if (args.length == 2 && SharpJsHelpers.TestTypeCheck(args[0], OutRefParam) && SharpJsHelpers.TestTypeCheck(args[1], 'number')) return this.Execute_SharpJs_Overload_0(<OutRefParam<Array<Array<IntPoint>>>>args[0], <number>args[1]);
-      else if (args.length == 2 && SharpJsHelpers.TestTypeCheck(args[0], OutRefParam) && SharpJsHelpers.TestTypeCheck(args[1], 'number')) return this.Execute_SharpJs_Overload_1(<OutRefParam<PolyTree>>args[0], <number>args[1]);
+      if (args.length == 2 && SharpJsHelpers.TestTypeCheck(args[0], OutRefParam) && SharpJsHelpers.TestTypeCheck(args[1], 'number')) return this.Execute_SharpJs_Overload_0(<OutRefParam<PolyTree>>args[0], <number>args[1]);
+      else if (args.length == 2 && SharpJsHelpers.TestTypeCheck(args[0], OutRefParam) && SharpJsHelpers.TestTypeCheck(args[1], 'number')) return this.Execute_SharpJs_Overload_1(<OutRefParam<Array<Array<IntPoint>>>>args[0], <number>args[1]);
       throw new Error('SharpJS: Failed to match method overload. This can be due to differences in C#/JS type system.');
    }
    

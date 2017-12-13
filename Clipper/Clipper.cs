@@ -4142,34 +4142,7 @@ namespace Clipper {
          }
       }
       //------------------------------------------------------------------------------
-
-      public void Execute(ref Paths solution, double delta) {
-         solution.Clear();
-         FixOrientations();
-         DoOffset(delta);
-         //now clean up 'corners' ...
-         Clipper clpr = new Clipper();
-         clpr.AddPaths(m_destPolys, PolyType.ptSubject, true);
-         if (delta > 0) {
-            clpr.Execute(ClipType.ctUnion, solution,
-               PolyFillType.pftPositive, PolyFillType.pftPositive);
-         } else {
-            IntRect r = Clipper.GetBounds(m_destPolys);
-            Path outer = new Path(4);
-
-            outer.Add(new IntPoint(r.left - 10, r.bottom + 10));
-            outer.Add(new IntPoint(r.right + 10, r.bottom + 10));
-            outer.Add(new IntPoint(r.right + 10, r.top - 10));
-            outer.Add(new IntPoint(r.left - 10, r.top - 10));
-
-            clpr.AddPath(outer, PolyType.ptSubject, true);
-            clpr.ReverseSolution = true;
-            clpr.Execute(ClipType.ctUnion, solution, PolyFillType.pftNegative, PolyFillType.pftNegative);
-            if (solution.Count > 0) solution.RemoveAt(0);
-         }
-      }
-      //------------------------------------------------------------------------------
-
+      // HACK: miyu - moved polytree execute up.
       public void Execute(ref PolyTree solution, double delta) {
          solution.Clear();
          FixOrientations();
@@ -4203,6 +4176,33 @@ namespace Clipper {
                   solution.AddChild(outerNode.Childs[i]);
             } else
                solution.Clear();
+         }
+      }
+      //------------------------------------------------------------------------------
+
+      public void Execute(ref Paths solution, double delta) {
+         solution.Clear();
+         FixOrientations();
+         DoOffset(delta);
+         //now clean up 'corners' ...
+         Clipper clpr = new Clipper();
+         clpr.AddPaths(m_destPolys, PolyType.ptSubject, true);
+         if (delta > 0) {
+            clpr.Execute(ClipType.ctUnion, solution,
+               PolyFillType.pftPositive, PolyFillType.pftPositive);
+         } else {
+            IntRect r = Clipper.GetBounds(m_destPolys);
+            Path outer = new Path(4);
+
+            outer.Add(new IntPoint(r.left - 10, r.bottom + 10));
+            outer.Add(new IntPoint(r.right + 10, r.bottom + 10));
+            outer.Add(new IntPoint(r.right + 10, r.top - 10));
+            outer.Add(new IntPoint(r.left - 10, r.top - 10));
+
+            clpr.AddPath(outer, PolyType.ptSubject, true);
+            clpr.ReverseSolution = true;
+            clpr.Execute(ClipType.ctUnion, solution, PolyFillType.pftNegative, PolyFillType.pftNegative);
+            if (solution.Count > 0) solution.RemoveAt(0);
          }
       }
       //------------------------------------------------------------------------------

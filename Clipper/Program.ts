@@ -1,29 +1,29 @@
 import { Clipper, ClipType, IntPoint, PolyFillType, PolyNode, PolyTree, PolyType } from './Clipper';
 
-/* SharpJS - Emitted on 12/12/2017 10:56:21 PM */
-class OutRefParam<T> { 
+/* SharpJS - Emitted on 12/12/2017 11:53:21 PM */
+export class OutRefParam<T> { 
    constructor (public read: () => T, public write: (val: T) => T) { }
 }
-function createOutRefParam<T>(read: () => T, write: (val: T) => T): OutRefParam<T> { return new OutRefParam<T>(read, write); }
+export function createOutRefParam<T>(read: () => T, write: (val: T) => T): OutRefParam<T> { return new OutRefParam<T>(read, write); }
 
 interface IComparer<T> { Compare(a : T, b : T): number; }
 class SharpJsHelpers { 
-   static conditionalAccess(val, next) { 
-      return val ? next(val) : val;
+   static conditionalAccess<T, R>(val: T, next : (x: T) => R) : R | null { 
+      return val ? next(val) : null;
    }
-   static valueClone(val) { 
+   static valueClone<T>(val: T): T { 
       if (!val || typeof val !== 'object') return val;
-      if (val.zzz__sharpjs_clone) return val.zzz__sharpjs_clone();
+      if ((<any>val).zzz__sharpjs_clone) return (<any>val).zzz__sharpjs_clone();
       return val;
    }
-   static arrayClear(arr) { 
+   static arrayClear<T>(arr: Array<T>): void { 
       while(arr.length) arr.pop();
    }
-   static TestTypeCheck(x, type) {
-      if (type === 'object') return typeof(x) == 'object' || x instanceof Object || x == null;
-      if (type === 'string') return typeof(x) == 'string' || x instanceof String;
+   static TestTypeCheck<T>(x: T, type: string | Function) {
+      if (type === 'object') return typeof(x) == 'object' || <any>x instanceof Object || <any>x == null;
+      if (type === 'string') return typeof(x) == 'string' || <any>x instanceof String;
       if (typeof(type) === 'string') return typeof(x) == type;
-      if (typeof(type) === 'function') return x instanceof type;
+      if (typeof(type) === 'function') return <any>x instanceof type;
       return false;
    }
    static readThenExec<T>(read: () => T, exec: (val: T) => void ): T {
