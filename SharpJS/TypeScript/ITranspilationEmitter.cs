@@ -34,7 +34,7 @@ namespace SharpJS.TypeScript {
          var typesByFilePath = types.ToLookup(c => c.GetLocation().GetMappedLineSpan().Path);
          
          foreach (var (filePath, fileTypes) in typesByFilePath.Select(g => (g.Key, g.ToList()))) {
-            var emittedTypeSources = new List<string>();
+            var emittedTypeNameAndSources = new List<(string, string)>();
             var dependentTypeNamesByPath = new Dictionary<string, HashSet<string>>();
             string entryPointFqid = null;
 
@@ -42,7 +42,7 @@ namespace SharpJS.TypeScript {
                var model = compilation.GetSemanticModel(type.SyntaxTree);
                var transpiler = new TypeScriptClassTranspiler(compilation, model, filePath, defaultNamespace, fqtnToFilePath);
                var result = transpiler.Emit(type);
-               emittedTypeSources.Add(result.Source);
+               emittedTypeNameAndSources.Add((type.Identifier.Text, result.Source));
                foreach (var (path, classNames) in result.ImportedClassesByPath) {
                   dependentTypeNamesByPath.Add(path, classNames);
                }
@@ -52,6 +52,15 @@ namespace SharpJS.TypeScript {
                   }
                   entryPointFqid = result.MainFullIdentifier;
                }
+            }
+
+            // HACK: order polynode below polytree lol
+            if (emittedTypeNameAndSources.Any(t => t.Item1 == "PolyNode")) {
+               var pn = emittedTypeNameAndSources.First(t => t.Item1 == "PolyNode");
+               emittedTypeNameAndSources.Remove(pn);
+               var pt = emittedTypeNameAndSources.First(t => t.Item1 == "PolyTree");
+               var pti = emittedTypeNameAndSources.IndexOf(pt);
+               emittedTypeNameAndSources.Insert(pti, pn);
             }
 
             var finalOutput = new StringBuilder();
@@ -76,7 +85,7 @@ class SharpJsHelpers {{
       return val ? next(val) : val;
    }}
    static valueClone(val) {{ 
-      if (typeof val !== 'object') return val;
+      if (!val || typeof val !== 'object') return val;
       if (val.zzz__sharpjs_clone) return val.zzz__sharpjs_clone();
       return val;
    }}
@@ -109,7 +118,7 @@ class SharpJsHelpers {{
 ");
             finalOutput.AppendLine();
 
-            emittedTypeSources.ForEach(s => finalOutput.AppendLine(s));
+            emittedTypeNameAndSources.ForEach(t => finalOutput.AppendLine(t.Item2));
             if (entryPointFqid != null) {
                finalOutput.AppendLine("eval(\"if (!module.parent) Program.Main(process.argv.slice(1))\");");
             }
@@ -164,6 +173,8 @@ class SharpJsHelpers {{
    }
 
    public class TypeScriptClassTranspiler {
+      private const string kImplicitStructDefaultCtorInternalName = "__SJS_ImplicitDefaultCtor";
+
       private readonly Compilation compilation;
       private readonly SemanticModel model;
       private readonly string filePath;
@@ -247,14 +258,21 @@ class SharpJsHelpers {{
          }
          EmitLine("{");
          Indent();
-         foreach (var field in node.Members<FieldDeclarationSyntax>()) {
+
+         var fields = node.Members.OfType<FieldDeclarationSyntax>().ToList();
+         foreach (var field in fields) {
             HandleFieldDeclaration(field);
          }
+         if (fields.Any()) EmitLine();
+
          HandleOverloadedBaseMethodGroupEmit(node.Identifier.Text, "constructor", node.Members.OfType<ConstructorDeclarationSyntax>().ToList(), true, hasBaseClass);
+
          foreach (var property in node.Members.OfType<PropertyDeclarationSyntax>().ToList()) {
             HandlePropertyDeclaration(node.Identifier.Text, property);
          }
+
          HandleMethodDeclarations(node.Identifier.Text, node.Members.OfType<MethodDeclarationSyntax>().ToList());
+
          foreach (var op in node.Members.OfType<OperatorDeclarationSyntax>()) {
             HandleOperatorDeclaration(node.Identifier.Text, op);
          }
@@ -266,10 +284,21 @@ class SharpJsHelpers {{
       private void HandleStructDeclaration(StructDeclarationSyntax node) {
          EmitLine("export class " + node.Identifier.Text + " {");
          Indent();
-         foreach (var field in node.Members.OfType<FieldDeclarationSyntax>()) {
+
+         var fields = node.Members.OfType<FieldDeclarationSyntax>().ToList();
+         foreach (var field in fields) {
             HandleFieldDeclaration(field);
          }
+         if (fields.Any()) EmitLine();
+
          var ctors = node.Members.OfType<ConstructorDeclarationSyntax>().ToList();
+         if (ctors.All(c => c.ParameterList.Parameters.Count != 0)) {
+            var implicitDefaultCtor = SyntaxFactory.ConstructorDeclaration(kImplicitStructDefaultCtorInternalName)
+               .WithModifiers(FindCommonModifiers(ctors.Select(c => c.Modifiers)))
+               .WithParameterList(SyntaxFactory.ParameterList())
+               .WithBody(SyntaxFactory.Block());
+            ctors.Insert(0, implicitDefaultCtor);
+         }
          HandleOverloadedBaseMethodGroupEmit(node.Identifier.Text, "constructor", ctors, true, false);
          foreach (var property in node.Members.OfType<PropertyDeclarationSyntax>().ToList()) {
             HandlePropertyDeclaration(node.Identifier.Text, property);
@@ -428,9 +457,15 @@ class SharpJsHelpers {{
          var isFirstMatch = true;
          for (var i = 0; i < matches.Count; i++) {
             var method = matches[i];
-            var si = model.GetDeclaredSymbol(method);
+            var cds = method as ConstructorDeclarationSyntax;
+            var isImplicitlyDefinedDefaultStructCtor = cds?.Identifier.Text == kImplicitStructDefaultCtorInternalName;
+            var si = isImplicitlyDefinedDefaultStructCtor ? null : model.GetDeclaredSymbol(method);
 
-            if (method is ConstructorDeclarationSyntax cds && cds.Initializer != null) {
+            if (isImplicitlyDefinedDefaultStructCtor) {
+               Trace.Assert(method.ParameterList.Parameters.Count == 0);
+            }
+
+            if (cds?.Initializer != null) {
                Console.Error.WriteLine("Warning: SharpJS only supports implicit Constructor Initializer supercalls (can't use : this() or :base()).");
             }
 
@@ -667,6 +702,11 @@ class SharpJsHelpers {{
       }
 
       private void HandleBlock(BlockSyntax body, bool trailingNewline) {
+         if (body.Statements.Count == 0) {
+            EmitLine("{ }");
+            return;
+         }
+
          EmitLine("{");
          Indent();
          foreach (var statement in body.Statements) HandleStatement(statement);

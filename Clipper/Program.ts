@@ -1,6 +1,6 @@
 import { Clipper, ClipType, IntPoint, PolyFillType, PolyNode, PolyTree, PolyType } from './Clipper';
 
-/* SharpJS - Emitted on 12/12/2017 10:20:06 PM */
+/* SharpJS - Emitted on 12/12/2017 10:56:21 PM */
 class OutRefParam<T> { 
    constructor (public read: () => T, public write: (val: T) => T) { }
 }
@@ -12,7 +12,7 @@ class SharpJsHelpers {
       return val ? next(val) : val;
    }
    static valueClone(val) { 
-      if (typeof val !== 'object') return val;
+      if (!val || typeof val !== 'object') return val;
       if (val.zzz__sharpjs_clone) return val.zzz__sharpjs_clone();
       return val;
    }

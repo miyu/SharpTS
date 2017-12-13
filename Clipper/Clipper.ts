@@ -1,4 +1,4 @@
-/* SharpJS - Emitted on 12/12/2017 10:20:07 PM */
+/* SharpJS - Emitted on 12/12/2017 10:56:22 PM */
 class OutRefParam<T> { 
    constructor (public read: () => T, public write: (val: T) => T) { }
 }
@@ -10,7 +10,7 @@ class SharpJsHelpers {
       return val ? next(val) : val;
    }
    static valueClone(val) { 
-      if (typeof val !== 'object') return val;
+      if (!val || typeof val !== 'object') return val;
       if (val.zzz__sharpjs_clone) return val.zzz__sharpjs_clone();
       return val;
    }
@@ -42,30 +42,6 @@ class SharpJsHelpers {
 }
 
 
-export class PolyTree extends PolyNode {
-   public m_AllPolys : Array<PolyNode> = new Array<PolyNode>();
-   constructor(...args: any[]) {
-      super();
-   }
-   
-   get Total(): number {
-      let result : number = this.m_AllPolys.length;
-      if (result > 0 && this.m_Childs[0] !== this.m_AllPolys[0]) result--;
-      return result;
-   }
-   public Clear() : void {
-      for (let i : number = 0; i < this.m_AllPolys.length; i++) this.m_AllPolys[i] = null;
-      SharpJsHelpers.arrayClear(this.m_AllPolys);
-      SharpJsHelpers.arrayClear(this.m_Childs);
-   }
-   
-   public GetFirst() : PolyNode {
-      if (this.m_Childs.length > 0) return this.m_Childs[0];
-      else return null;
-   }
-   
-}
-
 export class PolyNode {
    public m_Parent : PolyNode = null;
    public m_polygon : Array<IntPoint> = new Array<IntPoint>();
@@ -73,6 +49,7 @@ export class PolyNode {
    public m_jointype : JoinType = <JoinType>0;
    public m_endtype : EndType = <EndType>0;
    public m_Childs : Array<PolyNode> = new Array<PolyNode>();
+   
    constructor(...args: any[]) {
    }
    
@@ -124,6 +101,31 @@ export class PolyNode {
    
 }
 
+export class PolyTree extends PolyNode {
+   public m_AllPolys : Array<PolyNode> = new Array<PolyNode>();
+   
+   constructor(...args: any[]) {
+      super();
+   }
+   
+   get Total(): number {
+      let result : number = this.m_AllPolys.length;
+      if (result > 0 && this.m_Childs[0] !== this.m_AllPolys[0]) result--;
+      return result;
+   }
+   public Clear() : void {
+      for (let i : number = 0; i < this.m_AllPolys.length; i++) this.m_AllPolys[i] = null;
+      SharpJsHelpers.arrayClear(this.m_AllPolys);
+      SharpJsHelpers.arrayClear(this.m_Childs);
+   }
+   
+   public GetFirst() : PolyNode {
+      if (this.m_Childs.length > 0) return this.m_Childs[0];
+      else return null;
+   }
+   
+}
+
 export class TEdge {
    public Bot : IntPoint = IntPoint.default();
    public Curr : IntPoint = IntPoint.default();
@@ -143,6 +145,7 @@ export class TEdge {
    public PrevInAEL : TEdge = null;
    public NextInSEL : TEdge = null;
    public PrevInSEL : TEdge = null;
+   
    constructor(...args: any[]) {
    }
    
@@ -152,6 +155,7 @@ export class IntersectNode {
    public Edge1 : TEdge = null;
    public Edge2 : TEdge = null;
    public Pt : IntPoint = IntPoint.default();
+   
    constructor(...args: any[]) {
    }
    
@@ -175,6 +179,7 @@ export class LocalMinima {
    public LeftBound : TEdge = null;
    public RightBound : TEdge = null;
    public Next : LocalMinima = null;
+   
    constructor(...args: any[]) {
    }
    
@@ -183,6 +188,7 @@ export class LocalMinima {
 export class Scanbeam {
    public Y : number = 0;
    public Next : Scanbeam = null;
+   
    constructor(...args: any[]) {
    }
    
@@ -192,6 +198,7 @@ export class Maxima {
    public X : number = 0;
    public Next : Maxima = null;
    public Prev : Maxima = null;
+   
    constructor(...args: any[]) {
    }
    
@@ -205,6 +212,7 @@ export class OutRec {
    public Pts : OutPt = null;
    public BottomPt : OutPt = null;
    public PolyNode : PolyNode = null;
+   
    constructor(...args: any[]) {
    }
    
@@ -215,6 +223,7 @@ export class OutPt {
    public Pt : IntPoint = IntPoint.default();
    public Next : OutPt = null;
    public Prev : OutPt = null;
+   
    constructor(...args: any[]) {
    }
    
@@ -224,6 +233,7 @@ export class Join {
    public OutPt1 : OutPt = null;
    public OutPt2 : OutPt = null;
    public OffPt : IntPoint = IntPoint.default();
+   
    constructor(...args: any[]) {
    }
    
@@ -244,6 +254,7 @@ export class ClipperBase {
    public m_ActiveEdges : TEdge = null;
    public m_UseFullRange : boolean = false;
    public m_HasOpenPaths : boolean = false;
+   
    public constructor_SharpJs_Overload_0() {
       this.m_MinimaList = null;
       this.m_CurrentLM = null;
@@ -814,6 +825,7 @@ export class Clipper extends ClipperBase {
    private m_Joins : Array<Join> = null;
    private m_GhostJoins : Array<Join> = null;
    private m_UsingPolyTree : boolean = false;
+   
    public constructor_SharpJs_Overload_0(InitOptions : number = 0) {
       this.m_Scanbeam = null;
       this.m_Maxima = null;
@@ -3028,6 +3040,7 @@ export class ClipperOffset {
    private m_polyNodes : PolyNode = new PolyNode();
    private static readonly two_pi : number = Math.PI * 2;
    private static readonly def_arc_tolerance : number = 0.25;
+   
    public constructor_SharpJs_Overload_0(miterLimit : number = 2.0, arcTolerance : number = ClipperOffset.def_arc_tolerance) {
       this.MiterLimit = SharpJsHelpers.valueClone(miterLimit);
       this.ArcTolerance = SharpJsHelpers.valueClone(arcTolerance);
@@ -3349,8 +3362,7 @@ export class ClipperOffset {
 }
 
 export class ClipperException extends Error {
-   public constructor_SharpJs_Overload_0(description : string) {
-   }
+   public constructor_SharpJs_Overload_0(description : string) { }
    
    public constructor(description : string);
    public constructor(...args: any[]) {
@@ -3364,32 +3376,37 @@ export class ClipperException extends Error {
 export class DoublePoint {
    public X : number = 0;
    public Y : number = 0;
-   public constructor_SharpJs_Overload_0(x : number = 0, y : number = 0) {
+   
+   public constructor_SharpJs_Overload_0() { }
+   
+   public constructor_SharpJs_Overload_1(x : number = 0, y : number = 0) {
       this.X = SharpJsHelpers.valueClone(x);
       this.Y = SharpJsHelpers.valueClone(y);
    }
    
-   public constructor_SharpJs_Overload_1(dp : DoublePoint) {
+   public constructor_SharpJs_Overload_2(dp : DoublePoint) {
       this.X = SharpJsHelpers.valueClone(dp.X);
       this.Y = SharpJsHelpers.valueClone(dp.Y);
    }
    
-   public constructor_SharpJs_Overload_2(ip : IntPoint) {
+   public constructor_SharpJs_Overload_3(ip : IntPoint) {
       this.X = SharpJsHelpers.valueClone(ip.X);
       this.Y = SharpJsHelpers.valueClone(ip.Y);
    }
    
+   public constructor();
    public constructor();
    public constructor(x : number);
    public constructor(x : number, y : number);
    public constructor(dp : DoublePoint);
    public constructor(ip : IntPoint);
    public constructor(...args: any[]) {
-      if (args.length == 0) { this.constructor_SharpJs_Overload_0(<number>0, <number>0); return; }
-      else if (args.length == 1 && SharpJsHelpers.TestTypeCheck(args[0], 'number')) { this.constructor_SharpJs_Overload_0(<number>args[0], <number>0); return; }
-      else if (args.length == 2 && SharpJsHelpers.TestTypeCheck(args[0], 'number') && SharpJsHelpers.TestTypeCheck(args[1], 'number')) { this.constructor_SharpJs_Overload_0(<number>args[0], <number>args[1]); return; }
-      else if (args.length == 1 && SharpJsHelpers.TestTypeCheck(args[0], DoublePoint)) { this.constructor_SharpJs_Overload_1(<DoublePoint>args[0]); return; }
-      else if (args.length == 1 && SharpJsHelpers.TestTypeCheck(args[0], IntPoint)) { this.constructor_SharpJs_Overload_2(<IntPoint>args[0]); return; }
+      if (args.length == 0) { this.constructor_SharpJs_Overload_0(); return; }
+      else if (args.length == 0) { this.constructor_SharpJs_Overload_1(<number>0, <number>0); return; }
+      else if (args.length == 1 && SharpJsHelpers.TestTypeCheck(args[0], 'number')) { this.constructor_SharpJs_Overload_1(<number>args[0], <number>0); return; }
+      else if (args.length == 2 && SharpJsHelpers.TestTypeCheck(args[0], 'number') && SharpJsHelpers.TestTypeCheck(args[1], 'number')) { this.constructor_SharpJs_Overload_1(<number>args[0], <number>args[1]); return; }
+      else if (args.length == 1 && SharpJsHelpers.TestTypeCheck(args[0], DoublePoint)) { this.constructor_SharpJs_Overload_2(<DoublePoint>args[0]); return; }
+      else if (args.length == 1 && SharpJsHelpers.TestTypeCheck(args[0], IntPoint)) { this.constructor_SharpJs_Overload_3(<IntPoint>args[0]); return; }
       throw new Error('SharpJS: Failed to match method overload. This can be due to differences in C#/JS type system.');
    }
    
@@ -3407,29 +3424,34 @@ export class DoublePoint {
 export class Int128 {
    private hi : number = 0;
    private lo : number = 0;
-   public constructor_SharpJs_Overload_0(_lo : number) {
+   
+   public constructor_SharpJs_Overload_0() { }
+   
+   public constructor_SharpJs_Overload_1(_lo : number) {
       this.lo = SharpJsHelpers.valueClone(<number>_lo);
       if (_lo < 0) this.hi = SharpJsHelpers.valueClone(-1);
       else this.hi = SharpJsHelpers.valueClone(0);
    }
    
-   public constructor_SharpJs_Overload_1(_hi : number, _lo : number) {
+   public constructor_SharpJs_Overload_2(_hi : number, _lo : number) {
       this.lo = SharpJsHelpers.valueClone(_lo);
       this.hi = SharpJsHelpers.valueClone(_hi);
    }
    
-   public constructor_SharpJs_Overload_2(val : Int128) {
+   public constructor_SharpJs_Overload_3(val : Int128) {
       this.hi = SharpJsHelpers.valueClone(val.hi);
       this.lo = SharpJsHelpers.valueClone(val.lo);
    }
    
+   public constructor();
    public constructor(_lo : number);
    public constructor(_hi : number, _lo : number);
    public constructor(val : Int128);
    public constructor(...args: any[]) {
-      if (args.length == 1 && SharpJsHelpers.TestTypeCheck(args[0], 'number')) { this.constructor_SharpJs_Overload_0(<number>args[0]); return; }
-      else if (args.length == 2 && SharpJsHelpers.TestTypeCheck(args[0], 'number') && SharpJsHelpers.TestTypeCheck(args[1], 'number')) { this.constructor_SharpJs_Overload_1(<number>args[0], <number>args[1]); return; }
-      else if (args.length == 1 && SharpJsHelpers.TestTypeCheck(args[0], Int128)) { this.constructor_SharpJs_Overload_2(<Int128>args[0]); return; }
+      if (args.length == 0) { this.constructor_SharpJs_Overload_0(); return; }
+      else if (args.length == 1 && SharpJsHelpers.TestTypeCheck(args[0], 'number')) { this.constructor_SharpJs_Overload_1(<number>args[0]); return; }
+      else if (args.length == 2 && SharpJsHelpers.TestTypeCheck(args[0], 'number') && SharpJsHelpers.TestTypeCheck(args[1], 'number')) { this.constructor_SharpJs_Overload_2(<number>args[0], <number>args[1]); return; }
+      else if (args.length == 1 && SharpJsHelpers.TestTypeCheck(args[0], Int128)) { this.constructor_SharpJs_Overload_3(<Int128>args[0]); return; }
       throw new Error('SharpJS: Failed to match method overload. This can be due to differences in C#/JS type system.');
    }
    
@@ -3500,28 +3522,33 @@ export class Int128 {
 export class IntPoint {
    public X : number = 0;
    public Y : number = 0;
-   public constructor_SharpJs_Overload_0(X : number, Y : number) {
+   
+   public constructor_SharpJs_Overload_0() { }
+   
+   public constructor_SharpJs_Overload_1(X : number, Y : number) {
       this.X = SharpJsHelpers.valueClone(X);
       this.Y = SharpJsHelpers.valueClone(Y);
    }
    
-   public constructor_SharpJs_Overload_1(x : number, y : number) {
+   public constructor_SharpJs_Overload_2(x : number, y : number) {
       this.X = SharpJsHelpers.valueClone(<number>x);
       this.Y = SharpJsHelpers.valueClone(<number>y);
    }
    
-   public constructor_SharpJs_Overload_2(pt : IntPoint) {
+   public constructor_SharpJs_Overload_3(pt : IntPoint) {
       this.X = SharpJsHelpers.valueClone(pt.X);
       this.Y = SharpJsHelpers.valueClone(pt.Y);
    }
    
+   public constructor();
    public constructor(X : number, Y : number);
    public constructor(x : number, y : number);
    public constructor(pt : IntPoint);
    public constructor(...args: any[]) {
-      if (args.length == 2 && SharpJsHelpers.TestTypeCheck(args[0], 'number') && SharpJsHelpers.TestTypeCheck(args[1], 'number')) { this.constructor_SharpJs_Overload_0(<number>args[0], <number>args[1]); return; }
+      if (args.length == 0) { this.constructor_SharpJs_Overload_0(); return; }
       else if (args.length == 2 && SharpJsHelpers.TestTypeCheck(args[0], 'number') && SharpJsHelpers.TestTypeCheck(args[1], 'number')) { this.constructor_SharpJs_Overload_1(<number>args[0], <number>args[1]); return; }
-      else if (args.length == 1 && SharpJsHelpers.TestTypeCheck(args[0], IntPoint)) { this.constructor_SharpJs_Overload_2(<IntPoint>args[0]); return; }
+      else if (args.length == 2 && SharpJsHelpers.TestTypeCheck(args[0], 'number') && SharpJsHelpers.TestTypeCheck(args[1], 'number')) { this.constructor_SharpJs_Overload_2(<number>args[0], <number>args[1]); return; }
+      else if (args.length == 1 && SharpJsHelpers.TestTypeCheck(args[0], IntPoint)) { this.constructor_SharpJs_Overload_3(<IntPoint>args[0]); return; }
       throw new Error('SharpJS: Failed to match method overload. This can be due to differences in C#/JS type system.');
    }
    
@@ -3562,25 +3589,30 @@ export class IntRect {
    public top : number = 0;
    public right : number = 0;
    public bottom : number = 0;
-   public constructor_SharpJs_Overload_0(l : number, t : number, r : number, b : number) {
+   
+   public constructor_SharpJs_Overload_0() { }
+   
+   public constructor_SharpJs_Overload_1(l : number, t : number, r : number, b : number) {
       this.left = SharpJsHelpers.valueClone(l);
       this.top = SharpJsHelpers.valueClone(t);
       this.right = SharpJsHelpers.valueClone(r);
       this.bottom = SharpJsHelpers.valueClone(b);
    }
    
-   public constructor_SharpJs_Overload_1(ir : IntRect) {
+   public constructor_SharpJs_Overload_2(ir : IntRect) {
       this.left = SharpJsHelpers.valueClone(ir.left);
       this.top = SharpJsHelpers.valueClone(ir.top);
       this.right = SharpJsHelpers.valueClone(ir.right);
       this.bottom = SharpJsHelpers.valueClone(ir.bottom);
    }
    
+   public constructor();
    public constructor(l : number, t : number, r : number, b : number);
    public constructor(ir : IntRect);
    public constructor(...args: any[]) {
-      if (args.length == 4 && SharpJsHelpers.TestTypeCheck(args[0], 'number') && SharpJsHelpers.TestTypeCheck(args[1], 'number') && SharpJsHelpers.TestTypeCheck(args[2], 'number') && SharpJsHelpers.TestTypeCheck(args[3], 'number')) { this.constructor_SharpJs_Overload_0(<number>args[0], <number>args[1], <number>args[2], <number>args[3]); return; }
-      else if (args.length == 1 && SharpJsHelpers.TestTypeCheck(args[0], IntRect)) { this.constructor_SharpJs_Overload_1(<IntRect>args[0]); return; }
+      if (args.length == 0) { this.constructor_SharpJs_Overload_0(); return; }
+      else if (args.length == 4 && SharpJsHelpers.TestTypeCheck(args[0], 'number') && SharpJsHelpers.TestTypeCheck(args[1], 'number') && SharpJsHelpers.TestTypeCheck(args[2], 'number') && SharpJsHelpers.TestTypeCheck(args[3], 'number')) { this.constructor_SharpJs_Overload_1(<number>args[0], <number>args[1], <number>args[2], <number>args[3]); return; }
+      else if (args.length == 1 && SharpJsHelpers.TestTypeCheck(args[0], IntRect)) { this.constructor_SharpJs_Overload_2(<IntRect>args[0]); return; }
       throw new Error('SharpJS: Failed to match method overload. This can be due to differences in C#/JS type system.');
    }
    
