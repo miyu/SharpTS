@@ -53,11 +53,5 @@
   <ItemGroup>
     <None Include="App.config" />
   </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\SharpJS.Definitions\SharpJS.Definitions.csproj">
-      <Project>{c27eae65-ee87-419f-928b-89fccebfa3ac}</Project>
-      <Name>SharpJS.Definitions</Name>
-    </ProjectReference>
-  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>
