@@ -34,7 +34,6 @@ module.exports = {
         new CopyWebpackPlugin([
             { from: 'index.html' },
             { from: 'dependencies/boilerplate.js' },
-            { from: 'dependencies/tsJsxSupport.js' },
         ])
     ],
     devServer: {
