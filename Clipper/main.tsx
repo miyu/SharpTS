@@ -41,7 +41,7 @@ function main() {
         if (Key.isDown('z')) activePolyIsHole = false;
         if (Key.isDown('x')) activePolyIsHole = true;
         if (Key.isDown('enter') && activePoly.length > 0) {
-            polys.push([activePolyIsHole, buildActivePolyTree()]);
+            polys = [[false, buildResultPolyTree(true)]];
             activePoly = [];
         }
         if (Key.isDown('a')) activePolyIsLine = false;
@@ -55,8 +55,18 @@ function main() {
         renderDebugStats();
         activePoly.forEach(p => engine.fillEllipse('#00FFFF', p.X - 5, p.Y - 5, 10, 10));
 
+        var debug = Key.isDown('d');
         var preview = Key.isDown('p');
-        if (preview) {
+        if (debug) {
+            if (preview) {
+                var rpt = buildResultPolyTree(true);
+                drawPolyNode(rpt, true, '#FF0000', '#FFFFFF', '#00FF00');
+            } else {
+                var rpt = buildResultPolyTree(false);
+                drawPolyNode(rpt, true, '#FF0000', '#FFFFFF', '#00FF00');
+                drawPolyNode(buildActivePolyTree(), true, '#7F0000', '#7F7F7F', '#007F00');
+            }
+        } else if (preview) {
             var rpt = buildResultPolyTree(true);
             fillPolyNode(rpt, true, '#EEEEEE', '#333333');
         } else {
@@ -96,7 +106,7 @@ function main() {
             clipper.AddPath([].concat(activePoly, [activePoly[0]]), PolyType.ptSubject, true);
 
             var result: PolyTree = new PolyTree();
-            clipper.Execute(ClipType.ctXor, result, PolyFillType.pftEvenOdd);
+            clipper.Execute(ClipType.ctUnion, result, PolyFillType.pftEvenOdd);
 
             return result;
         }
@@ -104,27 +114,23 @@ function main() {
 
     function buildResultPolyTree(includeActivePolyTree: boolean) {
         var clipper = new Clipper(Clipper.ioStrictlySimple);
-        const visit = (n: PolyNode, isHolePolyTree: boolean, isHole: boolean) => {
+        const visit = (n: PolyNode, isHole: boolean, polyType: PolyType) => {
             if (n.Contour.length > 0) {
                 var ps = n.Contour.concat([]);
                 if (ps[0].opNotEquals(ps[ps.length - 1])) {
                     ps.push(ps[0].zzz__sharpjs_clone());
                 }   
-                if (isHolePolyTree) {
-                    clipper.AddPath(ps.reverse(), PolyType.ptSubject, true);
-                } else {
-                    clipper.AddPath(ps, PolyType.ptSubject, true);
-                }
+                clipper.AddPath(ps, polyType, true);
             }
-            n.Childs.forEach(c => visit(c, isHolePolyTree, !isHole));
+            n.Childs.forEach(c => visit(c, !isHole, polyType));
         };
-        polys.forEach(([isHole, pt]) => visit(pt, isHole, true));
+        polys.forEach(([isHole, pt]) => visit(pt, isHole, PolyType.ptSubject));
         if (includeActivePolyTree) {
-            visit(buildActivePolyTree(), activePolyIsHole, true);
+            visit(buildActivePolyTree(), false, PolyType.ptClip);
         }
 
         var result: PolyTree = new PolyTree();
-        clipper.Execute(ClipType.ctUnion, result, PolyFillType.pftPositive);
+        clipper.Execute(activePolyIsHole ? ClipType.ctDifference : ClipType.ctUnion, result, PolyFillType.pftPositive);
 
         return result;
     }
