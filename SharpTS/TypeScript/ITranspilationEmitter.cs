@@ -120,7 +120,7 @@ class SharpJsHelpers {{
 
             emittedTypeNameAndSources.ForEach(t => finalOutput.AppendLine(t.Item2));
             if (entryPointFqid != null) {
-               finalOutput.AppendLine("eval(\"if (!module.parent) Program.Main(process.argv.slice(1))\");");
+               finalOutput.AppendLine("eval(\"if (!module.parent && typeof(process) !== 'undefined' && typeof(process.argv) !== 'undefined') Program.Main(process.argv.slice(1))\");");
             }
 
             var outputFilePath = filePath.Substring(0, filePath.LastIndexOf('.')) + ".ts";

@@ -103,6 +103,7 @@ function main() {
             return result;
         } else {
             var clipper = new Clipper(Clipper.ioStrictlySimple);
+            
             clipper.AddPath([].concat(activePoly, [activePoly[0]]), PolyType.ptSubject, true);
 
             var result: PolyTree = new PolyTree();

@@ -4,7 +4,7 @@ import { OverloadingDemo } from './OverloadingDemo';
 import { PolymorphismDemo } from './PolymorphismDemo';
 import { OutRefDemo } from './OutRefDemo';
 
-/* SharpJS - Emitted on 12/13/2017 5:53:05 AM */
+/* SharpJS - Emitted on 12/14/2017 3:14:06 AM */
 export class OutRefParam<T> { 
    constructor (public read: () => T, public write: (val: T) => T) { }
 }
@@ -53,13 +53,23 @@ export class Program {
    }
    
    static Main(args : string[]) : void {
+      Program.Section("Linked Lists");
       LinkedListDemo.Test();
+      Program.Section("Arrays");
       ArrayDemo.Test();
+      Program.Section("Overloading");
       OverloadingDemo.Test();
+      Program.Section("Polymorphism");
       PolymorphismDemo.Test();
+      Program.Section("Out/Ref");
       OutRefDemo.Test();
+   }
+   
+   static Section(s : string) : void {
+      console.log(s);
+      console.log();
    }
    
 }
 
-eval("if (!module.parent) Program.Main(process.argv.slice(1))");
+eval("if (!module.parent && typeof(process) !== 'undefined' && typeof(process.argv) !== 'undefined') Program.Main(process.argv.slice(1))");

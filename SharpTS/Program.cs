@@ -12,21 +12,21 @@ using SharpJS.TypeScript;
 
 namespace SharpJS {
    public static class Program {
-      public static void Main() {
+      public static void Main(string[] args) {
          //Environment.SetEnvironmentVariable("MSBUILD_EXE_PATH", @"C:\Program Files (x86)\Microsoft Visual Studio\2017\Community\MSBuild\15.0\bin\msbuild.exe");
          Environment.SetEnvironmentVariable("VSINSTALLDIR", @"C:\Program Files (x86)\Microsoft Visual Studio\2017\Community");
          Environment.SetEnvironmentVariable("VisualStudioVersion", @"15.0");
 
          var workspace = MSBuildWorkspace.Create();
          workspace.WorkspaceFailed += (s, e) => {
-            Console.WriteLine($"Workspace failed {e.Diagnostic}");
+            //Console.WriteLine($"Workspace failed {e.Diagnostic}");
             //throw new Exception("Workspace failed");
          };
 
          //var solutionFilePath = @"C:\my-repositories\miyu\SharpJS\HelloWorld\HelloWorld.sln";
          //var solutionFilePath = @"C:\my-repositories\miyu\SharpJS\CrossFileReferences\CrossFileReferences.sln";
          //var solutionFilePath = @"C:\my-repositories\miyu\SharpJS\SimpleOOP\SimpleOOP.sln";
-         var solutionFilePath = @"C:\my-repositories\miyu\SharpJS\Clipper\Clipper.sln";
+         var solutionFilePath = args[0]; // @"C:\my-repositories\miyu\SharpJS\Clipper\Clipper.sln";
          var solution = workspace.OpenSolutionAsync(solutionFilePath).Result;
          var dependencyGraph = solution.GetProjectDependencyGraph();
          var finalSource = new StringBuilder();

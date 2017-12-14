@@ -1,4 +1,4 @@
-/* SharpJS - Emitted on 12/13/2017 5:53:37 AM */
+/* SharpJS - Emitted on 12/14/2017 3:03:07 AM */
 export class OutRefParam<T> { 
    constructor (public read: () => T, public write: (val: T) => T) { }
 }
@@ -60,4 +60,4 @@ export class Program {
    
 }
 
-eval("if (!module.parent) Program.Main(process.argv.slice(1))");
+eval("if (!module.parent && typeof(process) !== 'undefined' && typeof(process.argv) !== 'undefined') Program.Main(process.argv.slice(1))");
