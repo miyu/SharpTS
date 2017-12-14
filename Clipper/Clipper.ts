@@ -1,4 +1,4 @@
-/* SharpJS - Emitted on 12/12/2017 11:53:22 PM */
+/* SharpJS - Emitted on 12/13/2017 1:45:49 AM */
 export class OutRefParam<T> { 
    constructor (public read: () => T, public write: (val: T) => T) { }
 }

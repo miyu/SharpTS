@@ -1,6 +1,4 @@
-import { Clipper, ClipType, IntPoint, PolyFillType, PolyNode, PolyTree, PolyType } from './Clipper';
-
-/* SharpJS - Emitted on 12/13/2017 1:45:49 AM */
+/* SharpJS - Emitted on 12/13/2017 5:53:37 AM */
 export class OutRefParam<T> { 
    constructor (public read: () => T, public write: (val: T) => T) { }
 }
@@ -48,39 +46,16 @@ export class Program {
    constructor(...args: any[]) {
    }
    
-   private static MakeRectangle(left : number, top : number, right : number, bottom : number) : Array<IntPoint> {
-      let contour : Array<IntPoint> = new Array<IntPoint>();
-      contour.push(new IntPoint(left, top));
-      contour.push(new IntPoint(right, top));
-      contour.push(new IntPoint(right, bottom));
-      contour.push(new IntPoint(left, bottom));
-      contour.push(new IntPoint(left, top));
-      return contour;
+   public static Main(args : string[]) : number {
+      console.log("Hello, World!");
+      let age : number = Program.PromptAge();
+      console.log("You are " + age + " years old!");
+      return 0;
    }
    
-   private static Dump(indent : number, node : PolyNode) : void {
-      let s : string = "";
-      for (let i : number = 0; i < indent; i++) s += "  ";
-      for (let p of node.Contour) {
-         s += "(" + p.X + ", " + p.Y + ") ";
-      }
-      console.log(s);
-      for (let child of node.Childs) {
-         Program.Dump(indent + 1, child);
-      }
-   }
-   
-   static Main(args : string[]) : void {
-      let a : Array<IntPoint> = Program.MakeRectangle(0, 0, 10, 10);
-      let b : Array<IntPoint> = Program.MakeRectangle(5, 5, 15, 15);
-      console.log(Clipper.Area(a));
-      console.log(Clipper.Area(b));
-      let clipper : Clipper = new Clipper();
-      clipper.AddPath(a, PolyType.ptClip, true);
-      clipper.AddPath(b, PolyType.ptClip, true);
-      let pt : PolyTree = new PolyTree();
-      clipper.Execute(ClipType.ctUnion, pt, PolyFillType.pftPositive);
-      Program.Dump(0, pt);
+   public static PromptAge() : number {
+      console.log("How old are you?");
+      return parseInt(prompt("Enter String Input:"));
    }
    
 }
